@@ -1,19 +1,25 @@
-from bs4 import BeautifulSoup
 import os
-import re
+from pathlib import Path
 
-SPECIAL_CHARS = re.compile(r'[<>:"\\/|*\n]')
+import plac
+import sys
 
-for subdir, dirs, files in os.walk('../Stories'):
-    for file_name in files:
-        filepath = os.path.join(subdir, file_name)
+sys.path.append('.')
+from story.base import ILLEGAL_FILE_CHARS
 
-        if not filepath.endswith(".html"):
-            continue
 
-        new_file_name = SPECIAL_CHARS.sub("", file_name)
-        if file_name != new_file_name:
-            os.rename(filepath, os.path.join(subdir, new_file_name))
-            print(file_name)
-            print(new_file_name)
+@plac.pos('dir_to_search', "Directory to search", Path)
+def main(dir_to_search):
+    for root, dirs, files in os.walk(dir_to_search):
+        for file_name in files:
+            file_path = os.path.join(root, file_name)
 
+            new_file_name = ILLEGAL_FILE_CHARS.sub("", file_name)
+            if file_name != new_file_name:
+                os.rename(file_path, os.path.join(root, new_file_name))
+                print(file_name)
+                print(new_file_name)
+
+
+if __name__ == '__main__':
+    plac.call(main)
