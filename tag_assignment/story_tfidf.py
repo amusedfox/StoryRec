@@ -21,8 +21,8 @@ def batch_func(nlp, batch_id, batch, ngram_freq_dir, lemm_list_dir):
 
     print('Batch ID:', batch_id)
 
-    for story_name, story_text in batch:
-        lemm_list_path = os.path.join(lemm_list_dir, story_name)
+    for rel_story_path, story_text in batch:
+        lemm_list_path = os.path.join(lemm_list_dir, rel_story_path)
 
         if os.path.isfile(lemm_list_path):
             with open(lemm_list_path) as in_file:
@@ -47,7 +47,7 @@ def batch_func(nlp, batch_id, batch, ngram_freq_dir, lemm_list_dir):
         ngram_list = get_ngram_list(lemm_list)
         ngram_freq = get_ngram_freq(ngram_list)
 
-        dict_to_file(os.path.join(ngram_freq_dir, story_name), ngram_freq)
+        dict_to_file(os.path.join(ngram_freq_dir, rel_story_path), ngram_freq)
 
 
 def get_ngram_freq(ngram_list: List[str]):
