@@ -83,23 +83,19 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
     for file_path in tqdm(search_dir(ngram_freq_dir, '.txt')):
         n_docs += 1
 
-        ngram_set = set()
         with open(file_path) as in_file:
             for line in in_file:
                 data = line.rsplit(' ', 1)  # Since n-grams have multiple words
-                assert len(data) == 2, data
 
                 ngram = data[0]
-                ngram_set.add(ngram)
+                freq = int(data[1])
 
                 if ngram not in ngram_total_freq:
                     ngram_total_freq[ngram] = 0
-                ngram_total_freq[ngram] += 1
+                ngram_total_freq[ngram] += freq
 
-            for ngram in ngram_set:
                 if ngram not in ngram_doc_freq:
                     ngram_doc_freq[ngram] = 0
-
                 ngram_doc_freq[ngram] += 1
 
     # Use arbitrary number to filter out obviously low frequency n-grams to keep
