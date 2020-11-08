@@ -24,9 +24,6 @@ def main(dir_to_fix, html_dir, txt_dir):
 
     for subdir, dirs, files in tqdm(list(os.walk(dir_to_fix))):
 
-        if subdir == str(dir_to_fix):
-            continue
-
         for file_name in tqdm(files):
 
             # Get first char that is a letter
