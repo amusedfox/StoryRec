@@ -126,12 +126,10 @@ def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 3) -> List[str]:
     ngram_list = []
     numb_lemm = len(lemm_list)
 
-    for word_index, token in enumerate(lemm_list):
-        n_gram = lemm_list[word_index]
-
+    for word_index, n_gram in enumerate(lemm_list):
         # Don't include n-grams that start with a stop word
         # Don't include boundary points set in get_lemm_list
-        if n_gram in STOP_WORD_SET or n_gram == '.':
+        if n_gram in STOP_WORD_SET or n_gram == '.' or len(n_gram) == 1:
             continue
 
         # Include 1-gram strings
@@ -150,7 +148,7 @@ def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 3) -> List[str]:
 
             # Don't include n-grams that end with a stop word
             # But allow them in the middle
-            if lemm_list[i] in STOP_WORD_SET:
+            if lemm_list[i] in STOP_WORD_SET or len(lemm_list[i]) == 1:
                 continue
 
             ngram_list.append(n_gram)
@@ -240,7 +238,7 @@ def get_lemm_list(doc: Doc) -> List[str]:
             word_list.append('.')  # Find boundaries for n-grams
             continue
 
-        word_list.append(token.lemma_.lower())
+        word_list.append(token.lemma_.lower().replace('\202f', ''))
         # pos_list.append(token.pos_)
 
     return word_list
