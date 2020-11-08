@@ -1,4 +1,4 @@
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, SoupStrainer
 import requests
 import os
 from typing import List
@@ -13,6 +13,7 @@ NORMAL_COLOR = '\033[0m'
 GREEN_COLOR = '\033[92m'
 
 ILLEGAL_FILE_CHARS = re.compile(r'[<>:"\\/|*?\n]')
+TAG_STRAINER = SoupStrainer('tag')
 
 
 def get_soup(story_url: str) -> BeautifulSoup:
@@ -22,9 +23,35 @@ def get_soup(story_url: str) -> BeautifulSoup:
     return soup
 
 
-class BaseStory:
+def get_tags(file_path) -> List[str]:
+    assert file_path.endswith('.html'), f'{file_path} is not an .html file'
 
-    def __init__(self, story_dir=None, story_path=None, story_id=None):
+    with open(file_path) as in_file:
+        soup = BeautifulSoup(in_file.read(), 'lxml', parse_only=TAG_STRAINER)
+
+    tags = soup.find_all('tag')
+    return [ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags]
+
+
+class BaseStory:
+    """Base class for story objects"""
+
+    def __init__(self, story_dir: str = None, story_path: str = None,
+                 story_id: str = None):
+        """Creates a BaseStory instance
+
+        Has multiple usages:
+            Download a story
+            Read a story from disk
+
+        Parameters
+        ----------
+        story_dir
+        story_path
+            Path to story file to read
+        story_id
+            Used to download a story?
+        """
         self.story_path = story_path
         self.story_id = story_id
         self.story_dir = story_dir
