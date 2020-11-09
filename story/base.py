@@ -30,7 +30,8 @@ def get_tags(file_path) -> List[str]:
         soup = BeautifulSoup(in_file.read(), 'lxml', parse_only=TAG_STRAINER)
 
     tags = soup.find_all('tag')
-    return [ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags]
+    return \
+        [ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags if t.text[0] != '-']
 
 
 class BaseStory:
