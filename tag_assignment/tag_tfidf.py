@@ -16,11 +16,25 @@ from story.base import get_tags
 
 
 def associate_tags_stories(story_html_dir: str, tag_stories_dir: str,
-                           n_stories_to_use: int = -1,
-                           min_stories_per_tag: int = 100):
-    tag_stories_dict = {}
+                           min_stories_per_tag: int = 100,
+                           overwrite_tag_stories: bool = False):
 
+    tag_stories_dict = {}
     story_count = 0
+
+    if os.path.isdir(tag_stories_dir) and not overwrite_tag_stories:
+        for tag_file in os.listdir(tag_stories_dir):
+            tag_name = os.path.splitext(os.path.basename(tag_file))[0]
+            with open(os.path.join(tag_stories_dir, tag_file)) as in_file:
+                tag_list = in_file.read().strip().split('\n')
+                tag_stories_dict[tag_name] = tag_list
+                story_count += len(tag_list)
+
+        print(f'Using previously computed tag-story associations')
+        print(f'Found {story_count} stories and {len(tag_stories_dict)} tags')
+
+        return tag_stories_dict
+
     for rel_file_path in tqdm(
             search_dir(story_html_dir, '.html', abs_path=False)):
         abs_file_path = os.path.join(story_html_dir, rel_file_path)
@@ -33,8 +47,6 @@ def associate_tags_stories(story_html_dir: str, tag_stories_dir: str,
             tag_stories_dict[tag].append(os.path.splitext(rel_file_path)[0])
 
         story_count += 1
-        if story_count == n_stories_to_use:
-            break
 
     tag_stories_dict = {k: v for k, v in tag_stories_dict.items()
                         if len(v) > min_stories_per_tag}
@@ -45,7 +57,7 @@ def associate_tags_stories(story_html_dir: str, tag_stories_dir: str,
             for file_name in file_name_list:
                 out_file.write(f'{file_name}\n')
 
-    print(f'Found {story_count} stories')
+    print(f'Found {story_count} stories and {len(tag_stories_dict)} tags')
 
     return tag_stories_dict
 
@@ -53,13 +65,13 @@ def associate_tags_stories(story_html_dir: str, tag_stories_dir: str,
 def find_tag_ngram_tfidf(tfidf_dir: str, tag_tfidf_dir: str,
                          tag_stories_dict: dict, master_ngram_set: set,
                          min_n_stories: int = 100):
-    tag_count = 0
 
     total_ngram_tfidf = {k: 0 for k in master_ngram_set}
     for tag, file_name_list in tqdm(tag_stories_dict.items()):
 
         if len(file_name_list) < min_n_stories:
-            continue
+            raise ValueError(
+                f'Given file_name_list with length {len(file_name_list)}')
 
         for file_name in file_name_list:
             with open(os.path.join(tfidf_dir, f'{file_name}.txt')) as in_file:
@@ -74,15 +86,12 @@ def find_tag_ngram_tfidf(tfidf_dir: str, tag_tfidf_dir: str,
                     tfidf = float(data[1])
                     total_ngram_tfidf[ngram] += tfidf
 
+        file_name_list_len = len(file_name_list)
         for ngram in total_ngram_tfidf:
-            total_ngram_tfidf[ngram] /= len(file_name_list)
+            total_ngram_tfidf[ngram] /= file_name_list_len
 
         dict_to_file(os.path.join(tag_tfidf_dir, f'{tag}.txt'),
-                     total_ngram_tfidf)
-
-        tag_count += 1
-
-    print(f'Found {tag_count} tags')
+                     total_ngram_tfidf, write_zeros=False)
 
 
 def test_cosine_similarity(story_tfidf_dir, tag_stories_dir, tag_tfidf_dir,
@@ -159,16 +168,17 @@ def read_tfidf(file_path, master_ngram_dict):
 @plac.pos('tag_tfidf_dir', "Output directory for TF-IDF of tags", Path)
 @plac.pos('assets_dir', "Directory with misc files", Path)
 @plac.pos('master_ngram_set_file', "File path to Set of n-grams to use", Path)
-@plac.opt('n_stories_to_use', "Number of stories to use in corpus", int)
 @plac.opt('min_n_stories', "Min number of stories per tag", int)
+@plac.opt('overwrite_tag_stories', 'Whether to overwrite tag_stories', bool)
 def main(story_html_dir, story_tfidf_dir, tag_stories_dir, tag_tfidf_dir,
-         assets_dir, master_ngram_set_file, n_stories_to_use=-1,
-         min_n_stories=100):
+         assets_dir, master_ngram_set_file,
+         min_n_stories=100, overwrite_tag_stories=False):
     """Find the n-gram frequencies for each tag"""
 
     print('Associating tags with stories')
     tag_stories_dict = associate_tags_stories(story_html_dir, tag_stories_dir,
-                                              n_stories_to_use, min_n_stories)
+                                              min_n_stories,
+                                              overwrite_tag_stories)
 
     with open(master_ngram_set_file) as in_file:
         master_ngram_set = set(in_file.read().strip().split('\n'))
@@ -177,9 +187,9 @@ def main(story_html_dir, story_tfidf_dir, tag_stories_dir, tag_tfidf_dir,
     find_tag_ngram_tfidf(story_tfidf_dir, tag_tfidf_dir, tag_stories_dict,
                          master_ngram_set, min_n_stories)
 
-    print('Testing cosine similarity between stories and tags')
-    test_cosine_similarity(story_tfidf_dir, tag_stories_dir, tag_tfidf_dir,
-                           story_html_dir, assets_dir, master_ngram_set)
+    # print('Testing cosine similarity between stories and tags')
+    # test_cosine_similarity(story_tfidf_dir, tag_stories_dir, tag_tfidf_dir,
+    #                        story_html_dir, assets_dir, master_ngram_set)
 
 
 if __name__ == '__main__':

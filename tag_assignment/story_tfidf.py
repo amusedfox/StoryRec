@@ -131,7 +131,9 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
                 if ngram not in master_ngram_set:
                     continue
 
-                term_freq = int(data[1])
+                ngram_len = len(ngram.split())
+
+                term_freq = int(data[1]) * ngram_len
                 total_freq += term_freq
                 ngram_freq[ngram] = term_freq
 
@@ -144,7 +146,8 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
             idf = math.log(n_docs / ngram_doc_freq[ngram])
             story_tfidf[ngram] = tf * idf
 
-        dict_to_file(os.path.join(tf_idf_dir, rel_story_path), story_tfidf)
+        dict_to_file(os.path.join(tf_idf_dir, rel_story_path), story_tfidf,
+                     write_zeros=False)
 
 
 @plac.pos('story_text_dir', "Directory with .txt files", Path)
@@ -161,7 +164,7 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
 @plac.opt('overwrite', "Option to overwrite previous lemm_list_dir", bool)
 def main(story_text_dir, ngram_freq_dir, lemm_list_dir, story_tfidf_dir,
          ngram_doc_freq_file, ngram_total_freq_file, master_ngram_set_file,
-         n_files_to_use=-1, batch_size=1000, n_jobs=4, n_ngrams=10000,
+         n_files_to_use=-1, batch_size=1000, n_jobs=4, n_ngrams=4000,
          overwrite=False):
     """Calculate the TF-IDF of given text files"""
 
@@ -182,7 +185,7 @@ def main(story_text_dir, ngram_freq_dir, lemm_list_dir, story_tfidf_dir,
     find_ngram_freqs(story_text_dir, ngram_freq_dir, lemm_list_dir,
                      n_files_to_use, batch_size, n_jobs)
 
-    print('Finding n-gram doc frequencies')
+    print('Finding n-gram combined frequencies')
     ngram_doc_freq, n_docs, master_ngram_set = \
         get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
                           ngram_total_freq_file, master_ngram_set_file,

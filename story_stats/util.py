@@ -122,15 +122,19 @@ word_freq_dict = {}
 syllable_dict = cmudict.dict()
 
 
-def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 3) -> List[str]:
+def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 5) -> List[str]:
     ngram_list = []
     numb_lemm = len(lemm_list)
 
     for word_index, n_gram in enumerate(lemm_list):
-        # Don't include n-grams that start with a stop word
         # Don't include boundary points set in get_lemm_list
-        if n_gram in STOP_WORD_SET or n_gram == '.' or len(n_gram) == 1:
+        if n_gram == '.' or len(n_gram) == 1:
             continue
+
+        # Don't include n-grams that start and end with a stop word
+        start_with_stop = False
+        if n_gram in STOP_WORD_SET:
+            start_with_stop = True
 
         # Include 1-gram strings
         ngram_list.append(n_gram)
@@ -146,9 +150,11 @@ def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 3) -> List[str]:
 
             n_gram += " " + lemm_list[i]
 
-            # Don't include n-grams that end with a stop word
-            # But allow them in the middle
-            if lemm_list[i] in STOP_WORD_SET or len(lemm_list[i]) == 1:
+            # Don't include n-grams that start and end with a stop word
+            if lemm_list[i] in STOP_WORD_SET and start_with_stop:
+                continue
+
+            if len(lemm_list[i]) == 1:
                 continue
 
             ngram_list.append(n_gram)

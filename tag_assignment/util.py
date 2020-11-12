@@ -50,7 +50,8 @@ def load_dir(dir_to_search, file_ext: str, n_files_to_use=-1):
                 return
 
 
-def dict_to_file(file_path, dict_to_write, descending=True, n_to_output=-1):
+def dict_to_file(file_path, dict_to_write, descending=True, n_to_output=-1,
+                 write_zeros=True):
     folder_path = os.path.dirname(file_path)
     os.makedirs(folder_path, exist_ok=True)
 
@@ -59,6 +60,10 @@ def dict_to_file(file_path, dict_to_write, descending=True, n_to_output=-1):
     with open(file_path, 'w') as out_file:
         for key, value in sorted(dict_to_write.items(),
                                  key=lambda l: l[1], reverse=descending):
+
+            if value == 0 and not write_zeros:
+                continue
+
             out_file.write(f'{key} {value}\n')
 
             output_count += 1
