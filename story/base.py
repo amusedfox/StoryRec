@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup, SoupStrainer
 import requests
 import os
-from typing import List
+from typing import List, Set
 import datetime
 import re
 
@@ -23,15 +23,15 @@ def get_soup(story_url: str) -> BeautifulSoup:
     return soup
 
 
-def get_tags(file_path) -> List[str]:
+def get_story_tags(file_path) -> Set[str]:
     assert file_path.endswith('.html'), f'{file_path} is not an .html file'
 
     with open(file_path) as in_file:
         soup = BeautifulSoup(in_file.read(), 'lxml', parse_only=TAG_STRAINER)
 
     tags = soup.find_all('tag')
-    return \
-        [ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags if t.text[0] != '-']
+    return set(
+        ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags if t.text[0] != '-')
 
 
 class BaseStory:
