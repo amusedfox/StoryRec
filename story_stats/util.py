@@ -126,6 +126,8 @@ def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 5) -> List[str]:
     ngram_list = []
     numb_lemm = len(lemm_list)
 
+    lemm_list = [word if word != "'s" else '-pron-' for word in lemm_list]
+
     for word_index, n_gram in enumerate(lemm_list):
         # Don't include boundary points set in get_lemm_list
         if n_gram == '.' or len(n_gram) == 1:
@@ -135,9 +137,9 @@ def get_ngram_list(lemm_list: List[str], ngram_max_size: int = 5) -> List[str]:
         start_with_stop = False
         if n_gram in STOP_WORD_SET:
             start_with_stop = True
-
-        # Include 1-gram strings
-        ngram_list.append(n_gram)
+        else:
+            # Include 1-gram strings that are not stop words
+            ngram_list.append(n_gram)
 
         # Include up to ngram_max_size-gram strings
         for i in range(word_index + 1, word_index + ngram_max_size):

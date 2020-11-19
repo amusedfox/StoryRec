@@ -1,8 +1,11 @@
 import os
+import numpy as np
+import pandas as pd
+from pandasgui import show
 
 
 def search_dir(dir_to_search, file_ext: str, n_files_to_use=-1, abs_path=True):
-    """Returns list of absolute or relative file paths under directory"""
+    """Returns list of absolute or relative file paths in a dir recursively"""
 
     assert file_ext[0] == '.', f'File extension: {file_ext} does not have a ' \
                                f'period'
@@ -70,3 +73,49 @@ def dict_to_file(file_path, dict_to_write, descending=True, n_to_output=-1,
             if output_count == n_to_output:
                 break
 
+
+def get_tags_to_predict(tag_dir) -> list:
+    """Get tags that have at least a certain amount of stories"""
+
+    tag_set = set()
+    for tag_file in os.scandir(tag_dir):
+        tag_set.add(os.path.splitext(tag_file.name)[0])
+    tag_list = list(tag_set)
+    tag_list.sort()
+
+    return tag_list
+
+
+def get_tag_stories(tag_stories_file) -> set:
+    with open(tag_stories_file) as in_file:
+        tag_stories_list = in_file.read().strip().split('\n')
+    return set(tag_stories_list)
+
+
+def get_input_vector(ngram_index_dict: dict, abs_input_path, abs_save_path):
+    """Return the input vector for a given story"""
+
+    if os.path.isfile(abs_save_path):
+        with open(abs_save_path) as in_file:
+            ngram_values = \
+                [float(v) for v in in_file.read().strip().split('\n')]
+            ngram_vector = np.array(ngram_values)
+    else:
+        ngram_vector = np.zeros(len(ngram_index_dict))
+
+        # TODO: Choose ngram_freq_dir or story_tfidf_dir
+        with open(abs_input_path) as in_file:
+            for line in in_file:
+                ngram, value = line.rsplit(' ', 1)
+
+                if ngram not in ngram_index_dict:
+                    continue
+
+                ngram_i = ngram_index_dict[ngram]
+                ngram_vector[ngram_i] = float(value)
+
+        with open(abs_save_path, 'w') as out_file:
+            for value in ngram_vector:
+                out_file.write(f'{value}\n')
+
+    return ngram_vector

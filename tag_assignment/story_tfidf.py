@@ -14,7 +14,7 @@ from story_stats.util import *
 from tag_assignment.util import *
 
 
-def batch_func(nlp, batch_id, batch, ngram_freq_dir, lemm_list_dir):
+def ngram_freqs_batch_func(nlp, batch_id, batch, ngram_freq_dir, lemm_list_dir):
     print('Batch ID:', batch_id)
 
     for rel_story_path, story_text in batch:
@@ -55,8 +55,8 @@ def get_ngram_freq(ngram_list: List[str]):
     return ngram_freq
 
 
-def find_ngram_freqs(story_text_dir, ngram_freq_dir, lemm_list_dir,
-                     n_files_to_use=-1, batch_size=1000, n_jobs=4):
+def find_ngram_freqs(story_text_dir, lemm_list_dir, ngram_freq_dir,
+                     n_files_to_use=-1, batch_size=1000, n_jobs=-1):
     if not os.path.isdir(story_text_dir):
         raise NotADirectoryError(story_text_dir)
 
@@ -65,18 +65,21 @@ def find_ngram_freqs(story_text_dir, ngram_freq_dir, lemm_list_dir,
                            size=batch_size)
     executor = Parallel(n_jobs=n_jobs, backend="multiprocessing",
                         prefer="processes")
-    do = delayed(partial(batch_func, spacy_nlp))
+    do = delayed(partial(ngram_freqs_batch_func, spacy_nlp))
 
     tasks = (do(i, batch, ngram_freq_dir, lemm_list_dir)
              for i, batch in enumerate(partitions))
 
-    print('Executing tasks')
+    print('Finding n-gram frequencies')
     executor(tasks)
     print('Total time (hours):', (time.time() - start_time) / 3600)
 
 
 def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
                       ngram_total_freq_file, master_ngram_set_file, n_ngrams):
+
+    print('Finding n-gram combined frequencies')
+
     ngram_doc_freq = {}
     ngram_total_freq = {}
     n_docs = 0
@@ -114,8 +117,19 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
     return ngram_doc_freq, n_docs, set(ngram_total_freq.keys())
 
 
+def calculate_tfidf_batch_func(rel_story_paths, ngram_freq_dir, tf_idf_dir,
+                               ngram_doc_freq, n_docs, master_ngram_set):
+    pass
+
+
 def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
                     n_docs: int, master_ngram_set: set):
+    print('Calculating TF-IDF for each text')
+
+    # partitions = minibatch(search_dir(ngram_freq_dir, '.txt', abs_path=False))
+    # executor = Parallel(n_jobs=n_jobs, backend="multiprocessing",
+    #                     prefer="processes")
+
     for rel_story_path in tqdm(
             search_dir(ngram_freq_dir, '.txt', abs_path=False)):
         abs_file_path = os.path.join(ngram_freq_dir, rel_story_path)
@@ -133,7 +147,7 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
 
                 ngram_len = len(ngram.split())
 
-                term_freq = int(data[1]) * ngram_len
+                term_freq = int(data[1]) * (1.5 ** (ngram_len - 1))
                 total_freq += term_freq
                 ngram_freq[ngram] = term_freq
 
@@ -142,7 +156,9 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
         for ngram, term_freq in ngram_freq.items():
             # Prevent a bias towards larger documents (Source: Wikipedia)
             # tf = 0.5 + 0.5 * freq / most_freq_ngram_count
-            tf = term_freq / total_freq
+            # tf = term_freq / total_freq
+            # Longer stories should have more tags
+            tf = term_freq
             idf = math.log(n_docs / ngram_doc_freq[ngram])
             story_tfidf[ngram] = tf * idf
 
@@ -151,8 +167,8 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
 
 
 @plac.pos('story_text_dir', "Directory with .txt files", Path)
-@plac.pos('ngram_freq_dir', "Directory with n-gram frequencies", Path)
 @plac.pos('lemm_list_dir', "Directory with list of lemmatized words", Path)
+@plac.pos('ngram_freq_dir', "Directory with n-gram frequencies", Path)
 @plac.pos('story_tfidf_dir', "Output directory for TF-IDF of stories", Path)
 @plac.pos('ngram_doc_freq_file', "File path to document freq of n-grams", Path)
 @plac.pos('ngram_total_freq_file', "File path to total freq of n-grams", Path)
@@ -162,9 +178,9 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
 @plac.opt('n_jobs', "Number of jobs", int, 'j')
 @plac.opt('n_ngrams', "Number of n-grams to use", int, 'n')
 @plac.opt('overwrite', "Option to overwrite previous lemm_list_dir", bool)
-def main(story_text_dir, ngram_freq_dir, lemm_list_dir, story_tfidf_dir,
+def main(story_text_dir, lemm_list_dir, ngram_freq_dir, story_tfidf_dir,
          ngram_doc_freq_file, ngram_total_freq_file, master_ngram_set_file,
-         n_files_to_use=-1, batch_size=1000, n_jobs=4, n_ngrams=4000,
+         n_files_to_use=-1, batch_size=1000, n_jobs=-1, n_ngrams=5000,
          overwrite=False):
     """Calculate the TF-IDF of given text files"""
 
@@ -181,17 +197,14 @@ def main(story_text_dir, ngram_freq_dir, lemm_list_dir, story_tfidf_dir,
     else:
         print(f'Using previous computed values in {lemm_list_dir}')
 
-    print('Finding n-gram frequencies')
-    find_ngram_freqs(story_text_dir, ngram_freq_dir, lemm_list_dir,
+    find_ngram_freqs(story_text_dir, lemm_list_dir, ngram_freq_dir,
                      n_files_to_use, batch_size, n_jobs)
 
-    print('Finding n-gram combined frequencies')
     ngram_doc_freq, n_docs, master_ngram_set = \
         get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
                           ngram_total_freq_file, master_ngram_set_file,
                           n_ngrams)
 
-    print('Calculating TF-IDF for each text')
     calculate_tfidf(ngram_freq_dir, story_tfidf_dir, ngram_doc_freq, n_docs,
                     master_ngram_set)
 

@@ -6,6 +6,7 @@ from pathlib import Path
 from tqdm import tqdm
 import time
 import numpy as np
+import pandas as pd
 
 import math
 import string
@@ -158,7 +159,7 @@ def get_label_vectors(story_html_dir, master_tag_list):
     return np.array(y_vectors)
 
 
-def find_accuracy_per_tag(truths, predictions, story_names):
+def find_accuracy_per_tag(truths, predictions, story_names=None):
     """Find the accuracy of the predictions"""
 
     n_labels = 1
@@ -187,7 +188,8 @@ def find_accuracy_per_tag(truths, predictions, story_names):
                 if tag_pred:
                     BER_values[j][TP_i] += 1
                 else:
-                    print(story_names[i])
+                    if story_names:
+                        print(story_names[i])
                     BER_values[j][FN_i] += 1
             else:
                 n_neg += 1
@@ -240,7 +242,7 @@ def find_accuracy_per_tag(truths, predictions, story_names):
     print(f'Total f-scores: {combined_f_score}')
 
 
-def test_y_vector(x_vectors, y_vectors, story_names, model):
+def test_model(x_vectors, y_vectors, story_names, model):
     print('Vector shapes:', x_vectors.shape, '\n')
     x_train, x_test, y_train, y_test, story_names_train, story_names_test = \
         train_test_split(x_vectors, y_vectors, story_names, random_state=1)
@@ -257,6 +259,7 @@ def test_y_vector(x_vectors, y_vectors, story_names, model):
         val_predicts = model.predict_proba(x_test)
 
         print(val_predicts.shape)
+        print(model.classes_)
 
         # Outputs predictions in (n_samples, 2) when outputting only 1 var
         val_predicts = \
@@ -295,7 +298,7 @@ def test_y_vector(x_vectors, y_vectors, story_names, model):
 
     print(f'Regression Time: {time.time() - start_time}\n')
     print('Training results:')
-    find_accuracy_per_tag(y_train_res, train_predicts, story_names_train)
+    find_accuracy_per_tag(y_train_res, train_predicts)
 
     print()
 
@@ -314,24 +317,30 @@ def test_y_vector(x_vectors, y_vectors, story_names, model):
     print('\n-----------------------------------------------------------\n')
 
 
+def test_weights(x_vectors, y_vectors, story_names, tag_name, tag_stats_dir):
+    with open(os.path.join(tag_stats_dir, tag_name + '.txt')) as in_file:
+        df = pd.read_table(os.path.join(tag_stats_dir, tag_name + '.txt'))
+        
+
+
 @plac.pos('story_html_dir', 'Directory with story .html files', Path)
 @plac.pos('input_dir', "Directory with values corresponding to n-grams", Path)
-@plac.pos('tag_tfidf_dir', 'Directory with tag TF-IDFs', Path)
+@plac.pos('tag_stats_dir', 'Directory with tag TF-IDFs and other stats', Path)
 @plac.pos('tag_stories_dir', 'Directory with list of stories per tag', Path)
 @plac.pos('input_vector_dir', 'Directory to save input vectors', Path)
 @plac.opt('n_input_samples', 'Number of input samples to use', int)
-def main(story_html_dir, input_dir, tag_tfidf_dir, tag_stories_dir,
+def main(story_html_dir, input_dir, tag_stats_dir, tag_stories_dir,
          save_vector_dir, n_input_samples=-1):
-    master_tag_list = get_used_tags(tag_tfidf_dir)
+    master_tag_list = get_used_tags(tag_stats_dir)
 
     for tag_name in master_tag_list:
         print(f'Testing tag: {tag_name}')
         tag_file = tag_name + '.txt'
 
-        with open(os.path.join(tag_tfidf_dir, tag_file)) as in_file:
+        with open(os.path.join(tag_stats_dir, tag_file)) as in_file:
             tag_ngram_list = in_file.read().strip().split('\n')
         tag_ngram_dict = \
-            {tag.rsplit(' ', 1)[0]: i for i, tag in enumerate(tag_ngram_list)}
+            {line.split('\t', 1)[0]: i for i, line in enumerate(tag_ngram_list)}
 
         with open(os.path.join(tag_stories_dir, tag_file)) as in_file:
             tag_stories_list = in_file.read().strip().split('\n')
@@ -343,6 +352,11 @@ def main(story_html_dir, input_dir, tag_tfidf_dir, tag_stories_dir,
         orig_x_vectors, orig_y_vector, story_names = \
             get_vectors(story_html_dir, input_dir, tag_ngram_dict,
                         tag_stories_set, save_tag_dir, n_input_samples)
+        orig_x_vectors = scale(orig_x_vectors)
+
+        test_weights(orig_x_vectors, orig_y_vector, story_names, tag_name,
+                     tag_stats_dir)
+        return
 
         model_list = [
             # ('Adaboost Classifier', AdaBoostClassifier(random_state=1)),
@@ -359,8 +373,7 @@ def main(story_html_dir, input_dir, tag_tfidf_dir, tag_stories_dir,
             model_name, model = model_list.pop()
             print(f'Testing model: {model_name}')
 
-            orig_x_vectors = scale(orig_x_vectors)
-            test_y_vector(orig_x_vectors, orig_y_vector, story_names, model)
+            test_model(orig_x_vectors, orig_y_vector, story_names, model)
 
 
 if __name__ == '__main__':
