@@ -111,8 +111,8 @@ def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict):
         #     del total_ngram_tfidf[ngram]
 
         for ngram, tfidf_list in ngram_list.items():
-            while len(tfidf_list) < n_files:
-                tfidf_list.append(0)
+            tfidf_list.extend([0 for _ in range(n_files - len(tfidf_list))])
+            assert len(tfidf_list) == n_files
 
         ngram_stats = {
             ngram: {
