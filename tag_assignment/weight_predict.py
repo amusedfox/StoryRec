@@ -7,8 +7,7 @@ import plac
 import sys
 
 from tqdm import tqdm
-from pandasgui import show
-from sklearn.preprocessing import scale
+# from pandasgui import show
 
 sys.path.append('.')
 from story.base import get_story_tags
@@ -85,12 +84,12 @@ def get_tag_story_labels(abs_story_list, master_tag_list, n_input_samples):
 
 
 def test_weights(tag_text, df, x_test_vectors, train_story_set,
-                 valid_story_set, results_dir, n_ngrams=500):
+                 valid_story_set, results_dir, n_ngrams):
     print(f'Testing weights for {tag_text}')
 
     # df should be sorted by weight
     weight_vector = np.array(df['weight'])[:n_ngrams]
-    sum_weight_vector = sum(weight_vector)
+    weight_vector /= np.linalg.norm(weight_vector)
 
     os.makedirs(results_dir, exist_ok=True)
     train_file = open(os.path.join(results_dir, f'{tag_text}_train_results.txt'), 'w')
@@ -101,17 +100,25 @@ def test_weights(tag_text, df, x_test_vectors, train_story_set,
     for story_name, x_vector in x_test_vectors:
         if story_name in train_story_set:
             x_test_vector = x_vector[:n_ngrams]
-            value = np.dot(weight_vector, x_test_vector) / sum_weight_vector
+            if sum(x_test_vector) == 0:
+                value = 0
+            else:
+                x_test_vector /= np.linalg.norm(x_test_vector)
+                value = np.dot(weight_vector, x_test_vector)
             train_file.write(f'{story_name} {value}\n')
             # print('Train:', story_name, value)
             train_error += 0 if value > 1 else (1 - value)
-            df[story_name] = x_vector
             avg_value += value
         elif story_name in valid_story_set:
             x_test_vector = x_vector[:n_ngrams]
-            value = np.dot(weight_vector, x_test_vector) / sum_weight_vector
+            if sum(x_test_vector) == 0:
+                value = 0
+            else:
+                x_test_vector /= np.linalg.norm(x_test_vector)
+                value = np.dot(weight_vector, x_test_vector)
             valid_file.write(f'{story_name} {value}\n')
             # print('Validation:', story_name, value)
+            df[story_name] = x_vector
             valid_error += 0 if value > 1 else (1 - value)
             avg_value += value
         else:
@@ -119,8 +126,8 @@ def test_weights(tag_text, df, x_test_vectors, train_story_set,
     train_file.close()
     valid_file.close()
 
-    if tag_text == 'bdsm':
-        show(df)
+    # if tag_text == 'bdsm':
+    #     show(df)
 
     print(f'Train Error: {train_error / len(train_story_set)}')
     print(f'Valid Error: {valid_error / len(valid_story_set)}')
@@ -128,30 +135,36 @@ def test_weights(tag_text, df, x_test_vectors, train_story_set,
     print()
 
 
-def predict_tag(tag_text, df, x_vectors, y_vector, results_dir, n_ngrams=500):
+def predict_tag(tag_text, df, x_vectors, y_vector, results_dir, n_ngrams):
     print(f'Predicting stories that have {tag_text}')
 
     # df should be sorted by weight
     weight_vector = np.array(df['weight'])[:n_ngrams]
-    sum_weight_vector = sum(weight_vector)
+    weight_vector /= np.linalg.norm(weight_vector)
 
     os.makedirs(results_dir, exist_ok=True)
     predict_file = open(os.path.join(results_dir, f'{tag_text}_predictions.txt'), 'w')
     avg_value = 0
+    n_stories = 0
     for story_vector, has_tag in zip(x_vectors, y_vector):
         if has_tag:
             continue
 
         story_name, x_vector = story_vector
         x_test_vector = x_vector[:n_ngrams]
-        value = np.dot(weight_vector, x_test_vector) / sum_weight_vector
-        if value > 1:
+        if sum(x_test_vector) == 0:
+            value = 0
+        else:
+            x_test_vector /= np.linalg.norm(x_test_vector)
+
+            value = np.dot(weight_vector, x_test_vector)
+
+        if value > 0.3:
             predict_file.write(f'{story_name} {value}\n')
-            print(story_name, value)
-            df[story_name] = x_vector
         avg_value += value
-    if tag_text == 'anal':
-        show(df)
+        n_stories += 1
+
+    print(avg_value / n_stories)
 
 
 @plac.pos('story_html_dir', 'Directory with story .html files', Path)
@@ -160,18 +173,21 @@ def predict_tag(tag_text, df, x_vectors, y_vector, results_dir, n_ngrams=500):
 @plac.pos('tag_stories_dir', 'Directory with list of stories per tag', Path)
 @plac.pos('save_vectors_dir', 'Directory to save input vectors', Path)
 @plac.pos('results_dir', 'Directory to output results', Path)
-@plac.opt('n_input_samples', 'Number of input samples to use', int)
+@plac.opt('n_input_samples', 'Number of input samples to use', int, 'i')
+@plac.opt('n_ngrams', 'Number of n-grams to use in testing/prediction', int)
+@plac.opt('cutoff_pred', 'Cutoff prediction value', float)
 def main(story_html_dir, input_dir, tag_stats_dir, tag_stories_dir,
-         save_vectors_dir, results_dir, n_input_samples=-1):
+         save_vectors_dir, results_dir, n_input_samples=-1, n_ngrams=500,
+         cutoff_pred=0.3):
     master_tag_list = get_tags_to_predict(tag_stats_dir)
 
     # List of all story paths in html
     rel_html_list = search_dir(story_html_dir, '.html', abs_path=False)
+
     abs_html_list = \
         [os.path.join(story_html_dir, path) for path in rel_html_list]
-
-    # tag_story_labels = get_tag_story_labels(abs_html_list, master_tag_list,
-    #                                         n_input_samples)
+    tag_story_labels = get_tag_story_labels(abs_html_list, master_tag_list,
+                                            n_input_samples)
 
     for tag_text in master_tag_list:
         print(f'Testing tag: {tag_text}')
@@ -204,13 +220,13 @@ def main(story_html_dir, input_dir, tag_stats_dir, tag_stories_dir,
                               valid_stories_set.union(train_stories_set))
 
         test_weights(tag_text, df, x_test_vectors, train_stories_set,
-                     valid_stories_set, results_dir)
+                     valid_stories_set, results_dir, n_ngrams)
 
-        # x_vectors = \
-        #     get_input_vectors(rel_html_list, input_dir, save_tag_vector_dir, df,
-        #                       n_input_samples)
-        # predict_tag(tag_text, df, x_vectors, tag_story_labels[tag_text],
-        #             results_dir)
+        x_vectors = \
+            get_input_vectors(rel_html_list, input_dir, save_tag_vector_dir, df,
+                              n_input_samples)
+        predict_tag(tag_text, df, x_vectors, tag_story_labels[tag_text],
+                    results_dir, n_ngrams)
 
 
 if __name__ == '__main__':

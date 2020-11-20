@@ -3,7 +3,7 @@ from pathlib import Path
 import os
 import plac
 import pandas as pd
-from pandasgui import show
+# from pandasgui import show
 
 from tqdm import tqdm
 import numpy as np
@@ -78,8 +78,7 @@ def associate_tags_stories(story_html_dir: str, tag_stories_dir: str,
     return {k: v[:int(len(v) * use_ratio)] for k, v in tag_stories_dict.items()}
 
 
-def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict,
-                         master_ngram_set: set):
+def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict):
     """Find the TF-IDF of each tag
 
     Use the general master_ngram_set set of n-grams to create a master dict of
@@ -90,7 +89,7 @@ def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict,
 
     tag_tfidfs = {}
     for tag, file_name_list in tqdm(tag_stories_dict.items()):
-        total_ngram_tfidf = {k: [] for k in master_ngram_set}
+        total_ngram_tfidf = defaultdict(list)
 
         for file_name in file_name_list:
             with open(os.path.join(tfidf_dir, f'{file_name}.txt')) as in_file:
@@ -98,18 +97,22 @@ def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict,
                     data = line.rsplit(' ', 1)
                     ngram = data[0]
 
-                    if ngram not in master_ngram_set:
-                        raise ValueError(
-                            f'{file_name}: {ngram} not found in master set')
-
                     tfidf = float(data[1])
                     total_ngram_tfidf[ngram].append(tfidf)
 
         n_files = len(file_name_list)
+        # to_delete = []
         # Avoid mean of empty slice warning
-        for tfidf_list in total_ngram_tfidf.values():
+        for ngram, tfidf_list in total_ngram_tfidf.items():
+            # if len(tfidf_list) < 0.05 * n_files:
+            #     to_delete.append(ngram)
             while len(tfidf_list) < n_files:
                 tfidf_list.append(0)
+
+        # # Delete ngrams that have little relevance to the tag
+        # for ngram in to_delete:
+        #     del total_ngram_tfidf[ngram]
+
         # avg_ngram_tfidf = {ngram: np.mean(tfidf_list)
         #                    for ngram, tfidf_list in total_ngram_tfidf.items()}
         # dict_to_file(os.path.join(tag_tfidf_dir, f'{tag}.txt'),
@@ -217,7 +220,10 @@ def find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list, tag_n_stories):
     # Median of n-gram values from each tag
     # Used to find which n-grams are important to which tag
     median_values = {}
+    n_tags = len(tags_ngram_tfidf)
     for ngram, values in tags_ngram_list.items():
+        while len(values) < n_tags:
+            values.append(0)
         median_values[ngram] = np.median(values)
 
     df = pd.DataFrame.from_dict(median_values, orient='index',
@@ -238,8 +244,8 @@ def find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list, tag_n_stories):
             # If value is far from the median, increase the weight
             # Relatively low weight for values close to median
             # Higher weight for defining features
-            ngram_weight[ngram] = abs(value - median_values[ngram]) / \
-                median_values[ngram]
+            # ngram_weight[ngram] = abs(value - median_values[ngram]) / \
+            #     median_values[ngram]
             ngram_weight[ngram] = value - median_values[ngram]
             ngram_std[ngram] = np.std(values)
             ngram_median[ngram] = np.median(values)
@@ -261,7 +267,7 @@ def find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list, tag_n_stories):
                                         key=lambda l: l[1], reverse=True)[:1000]:
                 out_file.write(f'{ngram}\t{weight}\t{ngram_mean[ngram]}\t'
                                f'{ngram_std[ngram]}\n')
-    show(**tag_dfs)
+    # show(**tag_dfs)
     # df.to_csv()
 
 
@@ -269,24 +275,18 @@ def find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list, tag_n_stories):
 @plac.pos('story_tfidf_dir', "Directory with TF-IDF of stories", Path)
 @plac.pos('tag_stories_dir', "Output directory for story list for tags", Path)
 @plac.pos('tag_stats_dir', "Directory for TF-IDF and stats of tags", Path)
-@plac.pos('assets_dir', "Directory with misc files", Path)
-@plac.pos('master_ngram_set_file', "File path to Set of n-grams to use", Path)
 @plac.opt('min_n_stories', "Min number of stories per tag", int)
 @plac.opt('overwrite_tag_stories', 'Whether to overwrite tag_stories', bool)
 def main(story_html_dir, story_tfidf_dir, tag_stories_dir, tag_stats_dir,
-         master_ngram_set_file, min_n_stories=100, overwrite_tag_stories=False):
+         min_n_stories=100, overwrite_tag_stories=False):
     """Find the n-gram frequencies for each tag"""
 
     tag_stories_dict = associate_tags_stories(story_html_dir, tag_stories_dir,
                                               min_n_stories,
                                               overwrite_tag_stories)
 
-    with open(master_ngram_set_file) as in_file:
-        master_ngram_set = set(in_file.read().strip().split('\n'))
-
     tags_ngram_tfidf_list = find_tag_ngram_tfidf(story_tfidf_dir,
-                                                 tag_stories_dict,
-                                                 master_ngram_set)
+                                                 tag_stories_dict)
 
     find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list,
                           {tag: len(stories_list) for tag, stories_list

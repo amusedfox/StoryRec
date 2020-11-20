@@ -75,13 +75,10 @@ def find_ngram_freqs(story_text_dir, lemm_list_dir, ngram_freq_dir,
     print('Total time (hours):', (time.time() - start_time) / 3600)
 
 
-def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
-                      ngram_total_freq_file, master_ngram_set_file, n_ngrams):
+def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file):
 
     print('Finding n-gram combined frequencies')
-
     ngram_doc_freq = {}
-    ngram_total_freq = {}
     n_docs = 0
     for file_path in tqdm(search_dir(ngram_freq_dir, '.txt')):
         n_docs += 1
@@ -91,30 +88,35 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
                 data = line.rsplit(' ', 1)  # Since n-grams have multiple words
 
                 ngram = data[0]
-                freq = int(data[1])
 
-                if ngram not in ngram_total_freq:
-                    ngram_total_freq[ngram] = 0
-                ngram_total_freq[ngram] += freq
+                try:
+                    if ngram not in ngram_doc_freq:
+                        ngram_doc_freq[ngram] = 0
+                except MemoryError as e:
+                    print("Size of ngram_doc_freq:", len(ngram_doc_freq))
+                    print(e)
+                    sys.exit()
 
-                if ngram not in ngram_doc_freq:
-                    ngram_doc_freq[ngram] = 0
                 ngram_doc_freq[ngram] += 1
+
+        # Dictionaries use about 1.2 GB / 10mil items
+        # 10GB / 1.2 = 8
+        if len(ngram_doc_freq) > 80000000:
+            to_delete = []
+            for ngram, doc_freq in ngram_doc_freq:
+                if doc_freq <= 1:
+                    to_delete.append(ngram)
+            for ngram in to_delete:
+                del ngram_doc_freq[ngram]
+            print(len(ngram_doc_freq))
 
     # Use arbitrary number to filter out obviously low frequency n-grams to keep
     # file size small
-    ngram_doc_freq = {k: v for k, v in ngram_doc_freq.items() if v > 3}
+    min_n = 0.01 * n_docs
+    ngram_doc_freq = {k: v for k, v in ngram_doc_freq.items() if v >= min_n}
     dict_to_file(os.path.join(ngram_doc_freq_file), ngram_doc_freq)
 
-    ngram_total_freq = \
-        {k: v for k, v in sorted(ngram_total_freq.items(), key=lambda x: x[1],
-                                 reverse=True)[:n_ngrams]}
-    dict_to_file(os.path.join(ngram_total_freq_file), ngram_total_freq)
-    with open(os.path.join(master_ngram_set_file), 'w') as out:
-        for ngram in ngram_total_freq.keys():
-            out.write(f'{ngram}\n')
-
-    return ngram_doc_freq, n_docs, set(ngram_total_freq.keys())
+    return ngram_doc_freq, n_docs
 
 
 def calculate_tfidf_batch_func(rel_story_paths, ngram_freq_dir, tf_idf_dir,
@@ -123,7 +125,7 @@ def calculate_tfidf_batch_func(rel_story_paths, ngram_freq_dir, tf_idf_dir,
 
 
 def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
-                    n_docs: int, master_ngram_set: set):
+                    n_docs: int):
     print('Calculating TF-IDF for each text')
 
     # partitions = minibatch(search_dir(ngram_freq_dir, '.txt', abs_path=False))
@@ -135,14 +137,14 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
         abs_file_path = os.path.join(ngram_freq_dir, rel_story_path)
         ngram_freq = {}
 
-        story_tfidf = {k: 0 for k in master_ngram_set}
+        story_tfidf = {}
         total_freq = 0
         with open(abs_file_path) as in_file:
             for line in in_file:
                 data = line.rsplit(' ', 1)
                 ngram = data[0]
 
-                if ngram not in master_ngram_set:
+                if ngram not in ngram_doc_freq:
                     continue
 
                 ngram_len = len(ngram.split())
@@ -151,14 +153,16 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
                 total_freq += term_freq
                 ngram_freq[ngram] = term_freq
 
-        # most_freq_ngram_count = max(ngram_freq.values())
+        most_freq_ngram_count = max(ngram_freq.values())
 
         for ngram, term_freq in ngram_freq.items():
+            # ngram_len = len(ngram.split())
+
             # Prevent a bias towards larger documents (Source: Wikipedia)
             # tf = 0.5 + 0.5 * freq / most_freq_ngram_count
             # tf = term_freq / total_freq
             # Longer stories should have more tags
-            tf = term_freq
+            tf = term_freq / most_freq_ngram_count
             idf = math.log(n_docs / ngram_doc_freq[ngram])
             story_tfidf[ngram] = tf * idf
 
@@ -171,42 +175,37 @@ def calculate_tfidf(ngram_freq_dir: str, tf_idf_dir: str, ngram_doc_freq: dict,
 @plac.pos('ngram_freq_dir', "Directory with n-gram frequencies", Path)
 @plac.pos('story_tfidf_dir', "Output directory for TF-IDF of stories", Path)
 @plac.pos('ngram_doc_freq_file', "File path to document freq of n-grams", Path)
-@plac.pos('ngram_total_freq_file', "File path to total freq of n-grams", Path)
-@plac.pos('master_ngram_set_file', "File path to Set of n-grams to use", Path)
 @plac.opt('n_files_to_use', "Number of files to use in corpus", int, 'f')
 @plac.opt('batch_size', "Number of files in each batch", int)
 @plac.opt('n_jobs', "Number of jobs", int, 'j')
-@plac.opt('n_ngrams', "Number of n-grams to use", int, 'n')
 @plac.opt('overwrite', "Option to overwrite previous lemm_list_dir", bool)
+@plac.opt('skip_find_ngram_freqs', "Option to skip finding n-gram freqs", bool)
 def main(story_text_dir, lemm_list_dir, ngram_freq_dir, story_tfidf_dir,
-         ngram_doc_freq_file, ngram_total_freq_file, master_ngram_set_file,
-         n_files_to_use=-1, batch_size=1000, n_jobs=-1, n_ngrams=5000,
-         overwrite=False):
+         ngram_doc_freq_file, n_files_to_use=-1, batch_size=1000, n_jobs=-1,
+         overwrite=False, skip_find_ngram_freqs=False):
     """Calculate the TF-IDF of given text files"""
 
-    if overwrite:
-        confirm_overwrite = input(f'Confirm deletion of "{lemm_list_dir}"? ')
-        if confirm_overwrite == 'y':
-            if os.path.isdir(lemm_list_dir):
-                print(f'Deleting directory {lemm_list_dir}')
-                shutil.rmtree(lemm_list_dir)
+    if not skip_find_ngram_freqs:
+        if overwrite:
+            confirm_overwrite = input(f'Confirm deletion of "{lemm_list_dir}"? ')
+            if confirm_overwrite == 'y':
+                if os.path.isdir(lemm_list_dir):
+                    print(f'Deleting directory {lemm_list_dir}')
+                    shutil.rmtree(lemm_list_dir)
+                else:
+                    print(f'WARNING: {lemm_list_dir} does not exist')
             else:
-                print(f'WARNING: {lemm_list_dir} does not exist')
+                return
         else:
-            return
-    else:
-        print(f'Using previous computed values in {lemm_list_dir}')
+            print(f'Using previous computed values in {lemm_list_dir}')
 
-    find_ngram_freqs(story_text_dir, lemm_list_dir, ngram_freq_dir,
-                     n_files_to_use, batch_size, n_jobs)
+        find_ngram_freqs(story_text_dir, lemm_list_dir, ngram_freq_dir,
+                         n_files_to_use, batch_size, n_jobs)
 
-    ngram_doc_freq, n_docs, master_ngram_set = \
-        get_combined_freq(ngram_freq_dir, ngram_doc_freq_file,
-                          ngram_total_freq_file, master_ngram_set_file,
-                          n_ngrams)
+    ngram_doc_freq, n_docs = \
+        get_combined_freq(ngram_freq_dir, ngram_doc_freq_file)
 
-    calculate_tfidf(ngram_freq_dir, story_tfidf_dir, ngram_doc_freq, n_docs,
-                    master_ngram_set)
+    calculate_tfidf(ngram_freq_dir, story_tfidf_dir, ngram_doc_freq, n_docs)
 
 
 if __name__ == '__main__':
