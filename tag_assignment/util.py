@@ -1,7 +1,5 @@
 import os
 import numpy as np
-import pandas as pd
-from pandasgui import show
 
 
 def search_dir(dir_to_search, file_ext: str, n_files_to_use=-1, abs_path=True):
