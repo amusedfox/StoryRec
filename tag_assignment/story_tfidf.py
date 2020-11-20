@@ -79,7 +79,7 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file):
 
     print('Finding n-gram combined frequencies')
     ngram_doc_freq = {}
-    min_doc_freq = 1
+    min_doc_freq = 3
     n_docs = 0
     for file_path in tqdm(search_dir(ngram_freq_dir, '.txt')):
         n_docs += 1
@@ -87,8 +87,11 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file):
         with open(file_path) as in_file:
             for line in in_file:
                 data = line.rsplit(' ', 1)  # Since n-grams have multiple words
-
                 ngram = data[0]
+
+                # Avoid n-grams of over length 3 for now
+                if len(ngram.split()) > 3:
+                    continue
 
                 try:
                     if ngram not in ngram_doc_freq:
@@ -102,7 +105,7 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file):
 
         # Dictionaries use about 1.2 GB / 10mil items
         # 10GB / 1.2 = 8
-        if len(ngram_doc_freq) > 80000000:
+        if len(ngram_doc_freq) > 60000000:
             to_delete = []
             for ngram, doc_freq in ngram_doc_freq.items():
                 if doc_freq <= min_doc_freq:
