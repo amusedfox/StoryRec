@@ -63,22 +63,17 @@ def get_tag_story_labels(abs_story_list, master_tag_list, n_input_samples):
 
     tag_story_labels = {}
     for tag in master_tag_list:
-        tag_story_labels[tag] = []
+        tag_story_labels[tag] = np.zeros(len(abs_story_list), dtype=np.bool)
 
-    n_inputs = 0
-
-    for abs_html_path in tqdm(abs_story_list):
+    for i, abs_html_path in tqdm(enumerate(abs_story_list)):
 
         story_tag_set = get_story_tags(abs_html_path)
-        for tag in master_tag_list:
-            if tag not in story_tag_set:
-                tag_story_labels[tag].append(0)
-            else:
-                tag_story_labels[tag].append(1)
+        for tag in story_tag_set:
+            if tag in tag_story_labels:
+                tag_story_labels[tag][i] = 1
 
-        if n_inputs == n_input_samples:
+        if i == n_input_samples:
             break
-        n_inputs += 1
 
     return tag_story_labels
 
