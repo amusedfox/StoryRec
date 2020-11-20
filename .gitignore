@@ -3,6 +3,7 @@
 !README.md
 !*.py
 !*.conf
+!*.sh
 
 !assets/
 !assets/stopwords.txt

@@ -79,6 +79,7 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file):
 
     print('Finding n-gram combined frequencies')
     ngram_doc_freq = {}
+    min_doc_freq = 1
     n_docs = 0
     for file_path in tqdm(search_dir(ngram_freq_dir, '.txt')):
         n_docs += 1
@@ -103,11 +104,12 @@ def get_combined_freq(ngram_freq_dir, ngram_doc_freq_file):
         # 10GB / 1.2 = 8
         if len(ngram_doc_freq) > 80000000:
             to_delete = []
-            for ngram, doc_freq in ngram_doc_freq:
-                if doc_freq <= 1:
+            for ngram, doc_freq in ngram_doc_freq.items():
+                if doc_freq <= min_doc_freq:
                     to_delete.append(ngram)
             for ngram in to_delete:
                 del ngram_doc_freq[ngram]
+            min_doc_freq += 1
             print(len(ngram_doc_freq))
 
     # Use arbitrary number to filter out obviously low frequency n-grams to keep

@@ -79,17 +79,17 @@ def associate_tags_stories(story_html_dir: str, tag_stories_dir: str,
 
 
 def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict):
-    """Find the TF-IDF of each tag
+    """Find the combined TF-IDF stats of each tag
 
-    Use the general master_ngram_set set of n-grams to create a master dict of
-    TF-IDF values specific to each tag.
+    Combine all story TF-IDFs together for each tag and find statistics from
+    them.
     """
 
-    print('Finding list of ngram TF-IDFs for each tag')
+    print('Finding n-gram TF-IDF stats for each tag')
 
-    tag_tfidfs = {}
+    tag_stats = {}
     for tag, file_name_list in tqdm(tag_stories_dict.items()):
-        total_ngram_tfidf = defaultdict(list)
+        ngram_list = defaultdict(list)
 
         for file_name in file_name_list:
             with open(os.path.join(tfidf_dir, f'{file_name}.txt')) as in_file:
@@ -98,29 +98,39 @@ def find_tag_ngram_tfidf(tfidf_dir: str, tag_stories_dict: dict):
                     ngram = data[0]
 
                     tfidf = float(data[1])
-                    total_ngram_tfidf[ngram].append(tfidf)
+                    ngram_list[ngram].append(tfidf)
 
         n_files = len(file_name_list)
         # to_delete = []
-        # Avoid mean of empty slice warning
-        for ngram, tfidf_list in total_ngram_tfidf.items():
+        # # Delete ngrams that have little relevance to the tag
+        for ngram, tfidf_list in ngram_list.items():
             # if len(tfidf_list) < 0.05 * n_files:
             #     to_delete.append(ngram)
+            pass
+        # for ngram in to_delete:
+        #     del total_ngram_tfidf[ngram]
+
+        for ngram, tfidf_list in ngram_list.items():
             while len(tfidf_list) < n_files:
                 tfidf_list.append(0)
 
-        # # Delete ngrams that have little relevance to the tag
-        # for ngram in to_delete:
-        #     del total_ngram_tfidf[ngram]
+        ngram_stats = {
+            ngram: {
+                'mean': np.mean(tfidf_list),
+                # 'median': np.median(tfidf_list),
+                # 'std': np.std(tfidf_list),
+                'n': len([_ for _ in tfidf_list if _ != 0])
+            } for ngram, tfidf_list in ngram_list.items()
+        }
 
         # avg_ngram_tfidf = {ngram: np.mean(tfidf_list)
         #                    for ngram, tfidf_list in total_ngram_tfidf.items()}
         # dict_to_file(os.path.join(tag_tfidf_dir, f'{tag}.txt'),
         #              avg_ngram_tfidf, write_zeros=False)
 
-        tag_tfidfs[tag] = total_ngram_tfidf
+        tag_stats[tag] = ngram_stats
 
-    return tag_tfidfs
+    return tag_stats
 
 
 def test_cosine_similarity(story_tfidf_dir, tag_stories_dir, tag_tfidf_dir,
@@ -192,7 +202,7 @@ def read_tfidf(file_path, master_ngram_dict):
     return tfidf_vector
 
 
-def find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list, tag_n_stories):
+def find_important_ngrams(tag_stats_dir, tag_stats, tag_n_stories):
     """Get a list of important ngrams, weights, means, stds per tag
 
     n-gram important depends on the max difference between tags divided by the
@@ -202,71 +212,55 @@ def find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list, tag_n_stories):
     """
     os.makedirs(tag_stats_dir, exist_ok=True)
 
-    # Get mean TF-IDF for each n-gram in each tag
-    tags_ngram_tfidf = {}
-    for tag, ngram_tfidf_list_dict in tags_ngram_tfidf_list.items():
-        tags_ngram_tfidf[tag] = {}
-        for ngram, values in ngram_tfidf_list_dict.items():
-            # Add 0 to every n-gram to make it fair while avoiding empty slices
-            # values.append(0)
-            tags_ngram_tfidf[tag][ngram] = np.mean(values)
-
     # Get n-gram TF-IDF for each tag
     tags_ngram_list = defaultdict(list)
-    for ngram_tfidf_dict in tags_ngram_tfidf.values():
-        for ngram, tfidf in ngram_tfidf_dict.items():
-            tags_ngram_list[ngram].append(tfidf)
+    for ngram_tfidf_dict in tag_stats.values():
+        for ngram, stat_dict in ngram_tfidf_dict.items():
+            tags_ngram_list[ngram].append(stat_dict['mean'])
 
     # Median of n-gram values from each tag
     # Used to find which n-grams are important to which tag
     median_values = {}
-    n_tags = len(tags_ngram_tfidf)
-    for ngram, values in tags_ngram_list.items():
-        while len(values) < n_tags:
-            values.append(0)
-        median_values[ngram] = np.median(values)
+    n_tags = len(tag_stats)
+    for ngram, stat_dict in tags_ngram_list.items():
+        while len(stat_dict) < n_tags:
+            stat_dict.append(0)
+        median_values[ngram] = np.median(stat_dict)
 
     df = pd.DataFrame.from_dict(median_values, orient='index',
                                 columns=['median'])
 
     # Get stats for each n-gram within each tag's n-gram list
-    tag_dfs = {'overall': df}
-    for tag, ngram_tfidf_list_dict in tags_ngram_tfidf_list.items():
-        tag_df = pd.DataFrame()
+    # tag_dfs = {'overall': df}
+    for tag, ngram_tfidf_dict in tag_stats.items():
+        # tag_df = pd.DataFrame()
         ngram_weight = {}
-        ngram_std = {}
         ngram_mean = {}
-        ngram_median = {}
-        for ngram, values in ngram_tfidf_list_dict.items():
-            value = tags_ngram_tfidf[tag][ngram]
-            ngram_mean[ngram] = value
-
+        n_ngram = {}
+        for ngram, stat_dict in ngram_tfidf_dict.items():
             # If value is far from the median, increase the weight
             # Relatively low weight for values close to median
             # Higher weight for defining features
             # ngram_weight[ngram] = abs(value - median_values[ngram]) / \
             #     median_values[ngram]
-            ngram_weight[ngram] = value - median_values[ngram]
-            ngram_std[ngram] = np.std(values)
-            ngram_median[ngram] = np.median(values)
 
-        tag_df['weight'] = pd.Series(ngram_weight)
-        tag_df['std'] = pd.Series(ngram_std)
-        tag_df['mean'] = pd.Series(ngram_mean)
-        tag_df['median'] = pd.Series(ngram_median)
-        tag_df['n_stories'] = pd.Series(
-            {ngram: len([_ for _ in values if _ != 0]) for ngram, values
-             in ngram_tfidf_list_dict.items()})
-        df[tag] = pd.Series(tags_ngram_tfidf[tag])
-        tag_dfs[tag] = tag_df
+            ngram_weight[ngram] = stat_dict['mean'] - median_values[ngram]
+            ngram_mean[ngram] = stat_dict['mean']
+            n_ngram[ngram] = stat_dict['n']
+
+        # tag_df['weight'] = pd.Series(ngram_weight)
+        # tag_df['mean'] = pd.Series(ngram_mean)
+        # tag_df['n_stories'] = pd.Series(n_ngram)
+        # tag_dfs[tag] = tag_df
+        # df[tag] = pd.Series(ngram_mean)
 
         # Write statistics to file
         with open(os.path.join(tag_stats_dir, tag + '.txt'), 'w') as out_file:
-            out_file.write('ngram\tweight\tmean\tstd\n')
+            out_file.write('ngram\tweight\tmean\n')
             for ngram, weight in sorted(ngram_weight.items(),
                                         key=lambda l: l[1], reverse=True)[:1000]:
-                out_file.write(f'{ngram}\t{weight}\t{ngram_mean[ngram]}\t'
-                               f'{ngram_std[ngram]}\n')
+                out_file.write(f'{ngram}\t{weight}\t{ngram_mean[ngram]}\n')
+
     # show(**tag_dfs)
     # df.to_csv()
 
@@ -285,10 +279,9 @@ def main(story_html_dir, story_tfidf_dir, tag_stories_dir, tag_stats_dir,
                                               min_n_stories,
                                               overwrite_tag_stories)
 
-    tags_ngram_tfidf_list = find_tag_ngram_tfidf(story_tfidf_dir,
-                                                 tag_stories_dict)
+    tag_stats = find_tag_ngram_tfidf(story_tfidf_dir, tag_stories_dict)
 
-    find_important_ngrams(tag_stats_dir, tags_ngram_tfidf_list,
+    find_important_ngrams(tag_stats_dir, tag_stats,
                           {tag: len(stories_list) for tag, stories_list
                            in tag_stories_dict.items()})
 
