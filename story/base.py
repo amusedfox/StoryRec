@@ -90,10 +90,15 @@ class BaseStory:
         self.word_list: List[str] = []
         self.filtered_word_list: List[str] = []
         self.load_success = False
+        self.download_success = False
         self.is_preprocessed = False
 
         if story_url:
-            self.download_story(save_html_dir, save_txt_dir)
+            try:
+                self.download_story(save_html_dir, save_txt_dir)
+            except:
+                print(f'ERROR: Could not download {story_url}')
+                return
 
         elif story_html_path:
             # Read story from disk
@@ -128,6 +133,7 @@ class BaseStory:
             return
 
         self.download_story_chapters(soup)
+        self.download_success = True
 
     def load_story(self):
         with open(self.story_html_path) as in_file:
@@ -162,7 +168,11 @@ class BaseStory:
             self.chapters[i] = self.chapters[i].replace('‘', "'")
             self.chapters[i] = self.chapters[i].replace('’', "'")
 
-    def save(self):
+    def save(self, write_to_disk=True):
+
+        if not self.download_success:
+            return None, None
+
         self.prepare_to_save()
 
         # open a file with title as name
@@ -201,27 +211,28 @@ class BaseStory:
             output += f'<tag>{tag}</tag><br/>\n'
         output += f'</tags>\n</html>\n'
 
-        os.makedirs(os.path.dirname(self.story_html_path), exist_ok=True)
-        os.makedirs(os.path.dirname(self.story_txt_path), exist_ok=True)
+        if write_to_disk:
+            os.makedirs(os.path.dirname(self.story_html_path), exist_ok=True)
+            os.makedirs(os.path.dirname(self.story_txt_path), exist_ok=True)
 
-        try:
-            with open(self.story_html_path, 'w') as f:
-                f.write(output)
+            try:
+                with open(self.story_html_path, 'w') as f:
+                    f.write(output)
 
-            with open(self.story_txt_path, 'w') as f:
-                f.write(self.content)
-        except:
-            # Cleanup
-            if os.path.exists(self.story_html_path):
-                os.remove(self.story_html_path)
-            if os.path.exists(self.story_txt_path):
-                os.remove(self.story_txt_path)
+                with open(self.story_txt_path, 'w') as f:
+                    f.write(self.content)
+            except:
+                # Cleanup
+                if os.path.exists(self.story_html_path):
+                    os.remove(self.story_html_path)
+                if os.path.exists(self.story_txt_path):
+                    os.remove(self.story_txt_path)
 
-        print(f'{self.story_html_path}')
+        return output, self.content
 
     def add_tag(self, tag_name: str):
         tag_name = ILLEGAL_FILE_CHARS.sub('_', tag_name)
-        self.tags.append(tag_name)
+        self.tags.append(tag_name.lower())
 
     def preprocess(self):
         if self.content is None:

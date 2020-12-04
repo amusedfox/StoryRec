@@ -112,53 +112,47 @@ def scrape_story(story_url, category, story_html_dir, story_txt_dir):
 def download_stories(page_links, category, story_html_dir, story_txt_dir):
     print(
         f'Downloading stories from {category} with {len(page_links)} pages ...')
-    try:
-        for link in page_links:
-            print(f'Finding stories in {link} ...')
-            soup = get_soup(link)
+    for link in page_links:
+        print(f'Finding stories in {link} ...')
+        soup = get_soup(link)
 
-            story_list = soup.find('div', {'class': 'b-story-list'})
-            story_url_list = []
-            for story in story_list.find_all('div'):
-                title_meta = story.find('a', {'class': 'r-34i'})
-                if not title_meta:
+        story_list = soup.find('div', {'class': 'b-story-list'})
+        story_url_list = []
+        for story in story_list.find_all('div'):
+            title_meta = story.find('a', {'class': 'r-34i'})
+            if not title_meta:
+                continue
+
+            author = story.find('span', {'class': 'b-sli-author'})
+            title = title_meta.text
+            author = author.a.text
+            url = title_meta['href']
+
+            file_name = f'{author} - {title}'
+            first_char = get_first_char(file_name)
+
+            story_html_path = os.path.join(story_html_dir, first_char,
+                                           f'{file_name}.html')
+            if os.path.exists(story_html_path):
+                continue
+
+            # Sometimes the url does not contain "https:"?
+            if not url.startswith('https://'):
+                url = 'https:' + url
+                if not url.startswith('https://www.literotica.com'):
+                    print(f'ERROR: url is invalid: {url}')
                     continue
 
-                author = story.find('span', {'class': 'b-sli-author'})
-                title = title_meta.text
-                author = author.a.text
-                url = title_meta['href']
+            story_url_list.append(url)
 
-                file_name = f'{author} - {title}'
-                first_char = get_first_char(file_name)
+        print(f'Found {len(story_url_list)} stories to download')
 
-                story_html_path = os.path.join(story_html_dir, first_char,
-                                               f'{file_name}.html')
-                if os.path.exists(story_html_path):
-                    continue
+        scrape_cat = partial(scrape_story, category=category,
+                             story_html_dir=story_html_dir,
+                             story_txt_dir=story_txt_dir)
 
-                # Sometimes the url does not contain "https:"?
-                if not url.startswith('https://'):
-                    url = 'https:' + url
-                    if not url.startswith('https://www.literotica.com'):
-                        raise ValueError(url)
-
-                story_url_list.append(url)
-
-            scrape_cat = partial(scrape_story, category=category,
-                                 story_html_dir=story_html_dir,
-                                 story_txt_dir=story_txt_dir)
-
-            # Sometimes hangs here
-            main_pool.map(scrape_cat, story_url_list)
-            # try:
-            #     main_pool.map(scrape_cat, story_info_list)
-            # except AttributeError:
-            #     print(story_info_list)
-    except Exception as e:
-        print(f'Stopped on {category}')
-        print(e)
-        raise ValueError
+        # Sometimes hangs here for unknown reason
+        main_pool.map(scrape_cat, story_url_list)
 
 
 def download(story_html_dir, story_txt_dir):
