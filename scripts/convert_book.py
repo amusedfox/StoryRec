@@ -18,5 +18,5 @@ for filename in os.listdir('../books'):
     base.content = text
     base.author = info[0]
     base.title = info[1]
-    base.word_count = len(text.split())
-    base.write()
+    base.n_words = len(text.split())
+    base.save()

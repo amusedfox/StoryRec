@@ -98,11 +98,11 @@ def get_stories_stats(parent_dir: str,
                 num_short_stories += 1
                 continue
 
-            story = BaseStory(parent_dir, story_path=story_label)
+            story = BaseStory(parent_dir, story_html_path=story_label)
             if story is None:
                 continue
 
-            if check_short_story and story.word_count < MIN_STORY_WORD_COUNT:
+            if check_short_story and story.n_words < MIN_STORY_WORD_COUNT:
                 num_short_stories += 1
                 short_story_list_file.write(story_label + '\n')
                 continue

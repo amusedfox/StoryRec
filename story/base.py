@@ -37,8 +37,8 @@ def get_story_tags(file_path) -> Set[str]:
 class BaseStory:
     """Base class for story objects"""
 
-    def __init__(self, story_dir: str = None, story_path: str = None,
-                 story_id: str = None):
+    def __init__(self, story_html_path: str = None, story_url: str = None,
+                 save_html_dir: str = None, save_txt_dir: str = None):
         """Creates a BaseStory instance
 
         Has multiple usages:
@@ -47,85 +47,85 @@ class BaseStory:
 
         Parameters
         ----------
-        story_dir
-        story_path
+        story_html_path
             Path to story file to read
-        story_id
-            Used to download a story?
+        story_url
+            Url of story to download
+        save_html_dir
+            Directory to download story html file to
+        save_txt_dir
+            Directory to download story html file to
         """
-        self.story_path = story_path
-        self.story_id = story_id
-        self.story_dir = story_dir
+        self.story_txt_path = None
+        self.story_html_path = story_html_path
+        self.story_url = story_url
 
         self.title: str = "Unknown"
         self.author: str = "Unknown"
         self.author_link: str = "Unknown"
-        self.category: str = "Unknown"
         self.tags: List[str] = []
         self.is_complete: bool = False
-        time_now = datetime.datetime.now()
-        self.published_date: str = "Unknown"
-        self.updated_date: str = "Unknown"
-        self.downloaded_date: str = time_now.strftime('%Y-%m-%d')
-        self.rating: str = "Unknown"
-        self.num_chapters: int = 0
-        self.word_count: int = 0
-        self.publisher: str = "Unknown"
+        self.n_chapters: int = 0
+        self.n_words: int = 0
+        self.origin: str = "Unknown"
         self.summary: str = "Unknown"
-        self.link: str = "Unknown"
+        self.n_comments: int = 0
+        self.n_views: int = 0
+        self.n_favorites: int = 0
 
+        self.n_chapters: int = 0
         self.chapters: List[str] = []
         self.chapter_names: List[str] = []
-        self.content: str = "Unknown"
+        self.content: str = ""
         self.word_list: List[str] = []
         self.filtered_word_list: List[str] = []
         self.load_success = False
         self.is_preprocessed = False
 
-        if story_id and story_path:
-            print(f'{ERROR_COLOR}ERROR: Given both an id and a file_path{NORMAL_COLOR}')
-            return
+        if story_url:
+            self.download_story(save_html_dir, save_txt_dir)
 
-        if story_id:
-            if not story_dir:
-                print(f'{ERROR_COLOR}ERROR: Not given a folder to download to{NORMAL_COLOR}')
-                return
+        elif story_html_path:
+            # Read story from disk
 
-            soup = self.get_story_info()
-            self.title = ILLEGAL_FILE_CHARS.sub('', self.title)
-            self.author = ILLEGAL_FILE_CHARS.sub('', self.author)
-            self.category = ILLEGAL_FILE_CHARS.sub('', self.category)
-            self.story_path = f'{self.category}/{self.author} - {self.title}.html'
-
-            # TODO: Fix tags for already downloaded stories
-            for i in range(len(self.tags)):
-                self.tags[i] = ILLEGAL_FILE_CHARS.sub('_', self.tags[i])
-
-            if os.path.exists(os.path.join(self.story_dir, self.story_path)):
-                return
-
-            success = self.download_story(soup)
-            if not success:
-                return
-
-            # print(self.chapters[0].replace('</p>', '</p>\n\n'))
-            for i in range(len(self.chapters)):
-                self.chapters[i] = self.chapters[i].replace('“', '"')
-                self.chapters[i] = self.chapters[i].replace('”', '"')
-                self.chapters[i] = self.chapters[i].replace('‘', "'")
-                self.chapters[i] = self.chapters[i].replace('’', "'")
-
-            self.write()
-        elif story_path:
-            if not story_dir:
-                print(f'{ERROR_COLOR}ERROR: Not given a folder to load story from{NORMAL_COLOR}')
-                return
             success = self.load_story()
             if not success:
-                os.remove(os.path.join(self.story_dir, self.story_path))
+                to_remove = input(f'ERROR: Error with loading '
+                                  f'{self.story_html_path}. '
+                                  f'Remove? ')
+                if to_remove == 'y':
+                    print('Removed')
+                    os.remove(self.story_html_path)
+
+    def download_story(self, save_html_dir, save_txt_dir):
+        if not save_html_dir:
+            raise ValueError(f'Not given a folder to download to')
+
+        soup = get_soup(self.story_url)
+        self.find_story_metadata(soup)
+        self.title = ILLEGAL_FILE_CHARS.sub('', self.title)
+        self.author = ILLEGAL_FILE_CHARS.sub('', self.author)
+
+        file_name = f'{self.author} - {self.title}'
+        first_char = file_name[0]
+        first_char_i = 1
+        while not first_char.isalpha():
+            first_char = file_name[first_char_i]
+            first_char_i += 1
+        first_char = first_char.lower()
+
+        self.story_html_path = os.path.join(save_html_dir, first_char,
+                                            f'{file_name}.html')
+        self.story_txt_path = os.path.join(save_txt_dir, first_char,
+                                           f'{file_name}.txt')
+
+        if os.path.exists(self.story_html_path):
+            return
+
+        self.download_story_chapters(soup)
 
     def load_story(self):
-        with open(os.path.join(self.story_dir, self.story_path)) as in_file:
+        with open(self.story_html_path) as in_file:
             soup = BeautifulSoup(in_file.read(), 'lxml')
 
             self.content = ""
@@ -138,60 +138,77 @@ class BaseStory:
 
             self.title = title_soup.text
             self.author = soup.find(id='author').text
-            self.story_id = soup.find(id='story_id').text
-            self.word_count = \
+            self.n_words = \
                 int(soup.find(id='word_count').text.replace(',', ''))
             self.summary = soup.find(id='summary').text
-            self.category = soup.find(id='category').text
 
         return True
 
-    def write(self):
+    def prepare_to_save(self):
+        self.n_words = sum(len(chapter.replace('<br/>', '').split()) for
+                           chapter in self.chapters)
+
+        for i in range(len(self.tags)):
+            self.tags[i] = ILLEGAL_FILE_CHARS.sub('_', self.tags[i])
+
+        for i in range(len(self.chapters)):
+            self.chapters[i] = self.chapters[i].replace('“', '"')
+            self.chapters[i] = self.chapters[i].replace('”', '"')
+            self.chapters[i] = self.chapters[i].replace('‘', "'")
+            self.chapters[i] = self.chapters[i].replace('’', "'")
+
+    def save(self):
+        self.prepare_to_save()
+
         # open a file with title as name
         output = \
-            f'<!DOCTYPE html>\n<html lang="en-US">\n<title>{self.title}</title>\n' \
+            f'<!DOCTYPE html>\n<html lang="en-US">\n' \
+            f'<title>{self.title}</title>\n' \
             f'<meta charset="utf-8">\n' \
-            f'<h1><a id="title" href="{self.link}">{self.title}</a> by ' \
+            f'<h1><a id="title" href="{self.story_url}">{self.title}</a> by ' \
             f'<a id="author" href="{self.author_link}">{self.author}</a></h1>\n' \
-            f'<table>\n' \
-            f'<tr><td><b>Category:</b></td><td id="category">{self.category}</td></tr>\n' \
+            f'<table id="meta">\n' \
             f'<tr><td><b>IsComplete:</b></td><td id="is_complete">{self.is_complete}</td></tr>\n' \
-            f'<tr><td><b>Published:</b></td><td id="published_date">{self.published_date}</td></tr>\n' \
-            f'<tr><td><b>Updated:</b></td><td id="updated_date">{self.updated_date}</td></tr>\n' \
-            f'<tr><td><b>Downloaded:</b></td><td id="downloaded_date">{self.downloaded_date}</td></tr>\n' \
-            f'<tr><td><b>Rating:</b></td><td id="rating">{self.rating}</td></tr>\n' \
-            f'<tr><td><b>Chapters:</b></td><td id="num_chapters">{self.num_chapters}</td></tr>\n' \
-            f'<tr><td><b>Word Count:</b></td><td id="word_count">{self.word_count}</td></tr>\n' \
-            f'<tr><td><b>Publisher:</b></td><td id="publisher">{self.publisher}</td></tr>\n' \
+            f'<tr><td><b>View Count:</b></td><td id="n_views">{self.n_views}</td></tr>\n' \
+            f'<tr><td><b>Comment Count:</b></td><td id="n_comments">{self.n_comments}</td></tr>\n' \
+            f'<tr><td><b>Favorite Count:</b></td><td id="n_favorites">{self.n_favorites}</td></tr>\n' \
+            f'<tr><td><b>Word Count:</b></td><td id="n_words">{self.n_words}</td></tr>\n' \
+            f'<tr><td><b>Origin:</b></td><td id="origin">{self.origin}</td></tr>\n' \
             f'<tr><td><b>Summary:</b></td><td id="summary">{self.summary}</td></tr>\n' \
-            f'<tr><td><b>ID:</b></td><td id="story_id">{self.story_id}</td></tr>\n' \
             f'</table>\n' \
             f'<a><h2>Table of Contents</h2></a>\n' \
             f'<p>\n'
-        for i in range(self.num_chapters):
+
+        for i in range(self.n_chapters):
             output += f'<a href=#section{format(i + 1, "04d")}>{self.chapter_names[i]}</a><br/>\n'
         output += f'</p>\n' \
                   f'<div id="story_content">\n\n'
-        for i in range(self.num_chapters):
+        for i in range(self.n_chapters):
             output += \
                 f'<a name="section{format(i + 1, "04d")}">' \
-                f'<h2>{self.chapter_names[i]}</h2></a>\n' \
-                f'<div class="chapter">{self.chapters[i]}</div>\n\n'
+                f'<h2 class="chapter_name">{self.chapter_names[i]}</h2></a>\n' \
+                f'<div class="chapter_content"><p>{self.chapters[i]}</p></div>\n\n'
 
         output += f'</div>\n' \
-                  f'<br/><tags><b>Tags:</b><br/>\n'
+                  f'<br/>\n' \
+                  f'<tags><b>Tags:</b><br/>\n'
         for tag in self.tags:
             output += f'<tag>{tag}</tag><br/>\n'
         output += f'</tags>\n</html>\n'
 
-        story_dir = os.path.join(self.story_dir, self.category)
-        if not os.path.exists(story_dir):
-            os.mkdir(story_dir)
+        os.makedirs(os.path.dirname(self.story_html_path), exist_ok=True)
 
-        with open(os.path.join(self.story_dir, self.story_path), 'w') as f:
+        with open(self.story_html_path, 'w') as f:
             f.write(output)
 
-        print(f'{self}')
+        with open(self.story_txt_path, 'w') as f:
+            f.write(self.content)
+
+        print(f'{self.story_html_path}')
+
+    def add_tag(self, tag_name: str):
+        tag_name = ILLEGAL_FILE_CHARS.sub('_', tag_name)
+        self.tags.append(tag_name)
 
     def preprocess(self):
         if self.content is None:
@@ -215,11 +232,15 @@ class BaseStory:
             text = remove_punct(self.content)
             self.word_list = text.split()
 
-    def get_story_info(self):
+    def find_story_metadata(self, soup: BeautifulSoup):
+        """Find story title and author
+
+        May find other metadata as well if applicable
+        """
         raise AttributeError(f'Cannot download story info into BaseStory')
 
-    def download_story(self, soup: BeautifulSoup):
+    def download_story_chapters(self, soup: BeautifulSoup):
         raise AttributeError(f'Cannot download story into BaseStory')
 
     def __str__(self):
-        return self.story_path
+        return self.story_html_path

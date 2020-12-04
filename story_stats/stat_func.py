@@ -28,7 +28,7 @@ def get_quote_density(story: BaseStory):
     elif double_quote_count == single_quote_count and double_quote_count > 0:
         raise ValueError(
             f'Equal number of double quotes and single quotes for '
-            f'{story.story_path}: {single_quote_count}')
+            f'{story.story_html_path}: {single_quote_count}')
     else:
         return 0
 
@@ -63,7 +63,7 @@ def get_avg_sent_len(story: BaseStory):
 
 
 def get_commas_per_word(story: BaseStory):
-    return story.content.count(',') / story.word_count
+    return story.content.count(',') / story.n_words
 
 
 def get_avg_word_len(story: BaseStory):
