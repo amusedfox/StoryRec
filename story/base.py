@@ -96,8 +96,9 @@ class BaseStory:
         if story_url:
             try:
                 self.download_story(save_html_dir, save_txt_dir)
-            except:
+            except Exception as e:
                 print(f'ERROR: Could not download {story_url}')
+                print(e)
                 return
 
         elif story_html_path:

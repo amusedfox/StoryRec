@@ -5,6 +5,7 @@ from pathlib import Path
 import requests
 import re
 from functools import partial
+import time
 
 import sys
 
@@ -86,7 +87,15 @@ class LitStory(BaseStory):
 
 
 def get_soup(url=BASE_URL):
-    content = requests.get(url).content
+    while True:
+        r = requests.get(url)
+        if r.status_code == requests.codes.ok:
+            break
+
+        print(f'ERROR: Got status code: {r.status_code} for {url}')
+        time.sleep(60)
+
+    content = r.content
     return BeautifulSoup(content, "lxml")
 
 
@@ -129,8 +138,8 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
     for link in page_links:
         print(f'Finding stories in {link} ...')
         soup = get_soup(link)
-
         story_list = soup.find('div', {'class': 'b-story-list'})
+
         story_url_list = []
         for story in story_list.find_all('div'):
             title_meta = story.find('a', {'class': 'r-34i'})
