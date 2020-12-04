@@ -14,6 +14,20 @@ from story.base import BaseStory, get_first_char
 BASE_URL = 'https://www.literotica.com/stories/'
 NEW_STORIES_URL = 'new_submissions.php?type=story&page='
 
+IGNORE_CATEGORIES = {
+    'Audio',
+    'Erotic Poetry'
+    'How To',
+    'Humor & Satire',
+    'Illustrated',
+    'Non-English',
+    'Illustrated Poetry',
+    'Non-Erotic Poetry',
+    'Poetry With Audio',
+    'Adult Comics',
+    'Erotic Art'
+}
+
 
 class LitStory(BaseStory):
 
@@ -154,12 +168,17 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
         # Sometimes hangs here for unknown reason
         main_pool.map(scrape_cat, story_url_list)
 
+        sys.stdout.flush()
+
 
 def download(story_html_dir, story_txt_dir):
     categories = get_category_links()
 
     # for name in PRIORITY_CATEGORIES + list(categories.keys()):
     for category_name, link in categories.items():
+        if category_name in IGNORE_CATEGORIES:
+            continue
+
         # get count of pages
         n_pages, _ = get_page_count(link, '/1-page')
         print(f"{n_pages} pages for {category_name}")
