@@ -9,7 +9,7 @@ from functools import partial
 import sys
 
 sys.path.append('.')
-from story.base import BaseStory, get_first_char
+from story.base import BaseStory, get_first_char, ILLEGAL_FILE_CHARS
 
 BASE_URL = 'https://www.literotica.com/stories/'
 NEW_STORIES_URL = 'new_submissions.php?type=story&page='
@@ -138,8 +138,8 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
                 continue
 
             author = story.find('span', {'class': 'b-sli-author'})
-            title = title_meta.text
-            author = author.a.text
+            title = ILLEGAL_FILE_CHARS.sub('', title_meta.text)
+            author = ILLEGAL_FILE_CHARS.sub('', author.a.text)
             url = title_meta['href']
 
             file_name = f'{author} - {title}'
@@ -174,7 +174,6 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
 def download(story_html_dir, story_txt_dir):
     categories = get_category_links()
 
-    # for name in PRIORITY_CATEGORIES + list(categories.keys()):
     for category_name, link in categories.items():
         if category_name in IGNORE_CATEGORIES:
             continue
