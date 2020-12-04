@@ -34,6 +34,16 @@ def get_story_tags(file_path) -> Set[str]:
         ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags if t.text[0] != '-')
 
 
+def get_first_char(file_name):
+    first_char = file_name[0]
+    first_char_i = 1
+    while not first_char.isalpha():
+        first_char = file_name[first_char_i]
+        first_char_i += 1
+
+    return first_char.lower()
+
+
 class BaseStory:
     """Base class for story objects"""
 
@@ -107,12 +117,7 @@ class BaseStory:
         self.author = ILLEGAL_FILE_CHARS.sub('', self.author)
 
         file_name = f'{self.author} - {self.title}'
-        first_char = file_name[0]
-        first_char_i = 1
-        while not first_char.isalpha():
-            first_char = file_name[first_char_i]
-            first_char_i += 1
-        first_char = first_char.lower()
+        first_char = get_first_char(file_name)
 
         self.story_html_path = os.path.join(save_html_dir, first_char,
                                             f'{file_name}.html')
@@ -199,11 +204,18 @@ class BaseStory:
         os.makedirs(os.path.dirname(self.story_html_path), exist_ok=True)
         os.makedirs(os.path.dirname(self.story_txt_path), exist_ok=True)
 
-        with open(self.story_html_path, 'w') as f:
-            f.write(output)
+        try:
+            with open(self.story_html_path, 'w') as f:
+                f.write(output)
 
-        with open(self.story_txt_path, 'w') as f:
-            f.write(self.content)
+            with open(self.story_txt_path, 'w') as f:
+                f.write(self.content)
+        except:
+            # Cleanup
+            if os.path.exists(self.story_html_path):
+                os.remove(self.story_html_path)
+            if os.path.exists(self.story_txt_path):
+                os.remove(self.story_txt_path)
 
         print(f'{self.story_html_path}')
 

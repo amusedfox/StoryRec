@@ -7,8 +7,9 @@ import re
 from functools import partial
 
 import sys
+
 sys.path.append('.')
-from story.base import BaseStory
+from story.base import BaseStory, get_first_char
 
 BASE_URL = 'https://www.literotica.com/stories/'
 NEW_STORIES_URL = 'new_submissions.php?type=story&page='
@@ -80,7 +81,8 @@ def get_page_count(url, suffix):
     links = soup.find_all('div', {'class': 'b-pager-pages'})
 
     if 'option' in str(links):
-        return int(re.findall(r'<option[^>]*>([^<]+)</option>', str(links))[-1]), soup
+        return int(
+            re.findall(r'<option[^>]*>([^<]+)</option>', str(links))[-1]), soup
     else:
         return int(1), soup
 
@@ -108,24 +110,55 @@ def scrape_story(story_url, category, story_html_dir, story_txt_dir):
 
 
 def download_stories(page_links, category, story_html_dir, story_txt_dir):
-    print(f'Downloading stories from {category} with {len(page_links)} pages ...')
-    for link in page_links:
-        print(f'Finding stories in {link} ...')
-        soup = get_soup(link)
+    print(
+        f'Downloading stories from {category} with {len(page_links)} pages ...')
+    try:
+        for link in page_links:
+            print(f'Finding stories in {link} ...')
+            soup = get_soup(link)
 
-        story_list = soup.findAll('a', {'class': 'r-34i'})
-        story_url_list = [x['href'] for x in story_list]
+            story_list = soup.find('div', {'class': 'b-story-list'})
+            story_url_list = []
+            for story in story_list.find_all('div'):
+                title_meta = story.find('a', {'class': 'r-34i'})
+                if not title_meta:
+                    continue
 
-        scrape_cat = partial(scrape_story, category=category,
-                             story_html_dir=story_html_dir,
-                             story_txt_dir=story_txt_dir)
+                author = story.find('span', {'class': 'b-sli-author'})
+                title = title_meta.text
+                author = author.a.text
+                url = title_meta['href']
 
-        # Sometimes hangs here
-        main_pool.map(scrape_cat, story_url_list)
-        # try:
-        #     main_pool.map(scrape_cat, story_info_list)
-        # except AttributeError:
-        #     print(story_info_list)
+                file_name = f'{author} - {title}'
+                first_char = get_first_char(file_name)
+
+                story_html_path = os.path.join(story_html_dir, first_char,
+                                               f'{file_name}.html')
+                if os.path.exists(story_html_path):
+                    continue
+
+                # Sometimes the url does not contain "https:"?
+                if not url.startswith('https://'):
+                    url = 'https:' + url
+                    if not url.startswith('https://www.literotica.com'):
+                        raise ValueError(url)
+
+                story_url_list.append(url)
+
+            scrape_cat = partial(scrape_story, category=category,
+                                 story_html_dir=story_html_dir,
+                                 story_txt_dir=story_txt_dir)
+
+            # Sometimes hangs here
+            main_pool.map(scrape_cat, story_url_list)
+            # try:
+            #     main_pool.map(scrape_cat, story_info_list)
+            # except AttributeError:
+            #     print(story_info_list)
+    except Exception as e:
+        print(f'Stopped on {category}')
+        print(e)
+        raise ValueError
 
 
 def download(story_html_dir, story_txt_dir):
@@ -133,7 +166,6 @@ def download(story_html_dir, story_txt_dir):
 
     # for name in PRIORITY_CATEGORIES + list(categories.keys()):
     for category_name, link in categories.items():
-
         # get count of pages
         n_pages, _ = get_page_count(link, '/1-page')
         print(f"{n_pages} pages for {category_name}")
