@@ -34,7 +34,7 @@ def get_story_tags(file_path) -> Set[str]:
         ILLEGAL_FILE_CHARS.sub('_', t.text) for t in tags if t.text[0] != '-')
 
 
-def get_first_char(file_name):
+def get_prefix_folder(file_name):
     first_char = file_name[0]
     first_char_i = 1
     while not first_char.isalpha():
@@ -123,7 +123,7 @@ class BaseStory:
         self.author = ILLEGAL_FILE_CHARS.sub('', self.author)
 
         file_name = f'{self.author} - {self.title}'
-        first_char = get_first_char(file_name)
+        first_char = get_prefix_folder(file_name)
 
         self.story_html_path = os.path.join(save_html_dir, first_char,
                                             f'{file_name}.html')

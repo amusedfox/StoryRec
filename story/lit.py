@@ -4,13 +4,12 @@ import plac
 from pathlib import Path
 import requests
 import re
-from functools import partial
 import time
 
 import sys
 
 sys.path.append('.')
-from story.base import BaseStory, get_first_char, ILLEGAL_FILE_CHARS
+from story.base import BaseStory, get_prefix_folder, ILLEGAL_FILE_CHARS
 
 BASE_URL = 'https://www.literotica.com/stories/'
 NEW_STORIES_URL = 'new_submissions.php?type=story&page='
@@ -27,6 +26,11 @@ IGNORE_CATEGORIES = {
     'Poetry With Audio',
     'Adult Comics',
     'Erotic Art'
+}
+
+PROXIES = {
+    'http': '162.214.92.202:80',
+    'https': '51.81.82.175:80'
 }
 
 
@@ -88,15 +92,18 @@ class LitStory(BaseStory):
 
 def get_soup(url=BASE_URL):
     while True:
-        r = requests.get(url)
-        if r.status_code == requests.codes.ok:
+        r = requests.get(url, proxies=PROXIES)
+        if r.status_code == 200:
             break
 
         print(f'ERROR: Got status code: {r.status_code} for {url}')
-        time.sleep(60)
+        time.sleep(300)
 
     content = r.content
-    return BeautifulSoup(content, "lxml")
+    soup = BeautifulSoup(content, "lxml")
+
+    time.sleep(0.5)
+    return soup
 
 
 def get_page_count(url, suffix):
@@ -136,7 +143,6 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
     print(
         f'Downloading stories from {category} with {len(page_links)} pages ...')
     for link in page_links:
-        print(f'Finding stories in {link} ...')
         soup = get_soup(link)
         story_list = soup.find('div', {'class': 'b-story-list'})
 
@@ -152,7 +158,7 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
             url = title_meta['href']
 
             file_name = f'{author} - {title}'
-            first_char = get_first_char(file_name)
+            first_char = get_prefix_folder(file_name)
 
             story_html_path = os.path.join(story_html_dir, first_char,
                                            f'{file_name}.html')
@@ -168,16 +174,10 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
 
             story_url_list.append(url)
 
-        print(f'Found {len(story_url_list)} stories to download')
+        print(f'Found {len(story_url_list)} stories to download from {link}')
 
-        scrape_cat = partial(scrape_story, category=category,
-                             story_html_dir=story_html_dir,
-                             story_txt_dir=story_txt_dir)
-
-        # Sometimes hangs here for unknown reason
-        main_pool.map(scrape_cat, story_url_list)
-
-        sys.stdout.flush()
+        for url in story_url_list:
+            scrape_story(url, category, story_html_dir, story_txt_dir)
 
 
 def download(story_html_dir, story_txt_dir):
@@ -203,14 +203,7 @@ def download(story_html_dir, story_txt_dir):
 @plac.pos('story_txt_dir', "Directory with .txt files", Path)
 def main(story_html_dir, story_txt_dir):
     download(story_html_dir, story_txt_dir)
-    main_pool.close()
-    main_pool.join()
 
 
 if __name__ == '__main__':
-    import multiprocessing
-
-    main_pool = multiprocessing.Pool(
-        processes=multiprocessing.cpu_count() * 2
-    )
     plac.call(main)
