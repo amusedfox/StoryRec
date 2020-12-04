@@ -197,6 +197,7 @@ class BaseStory:
         output += f'</tags>\n</html>\n'
 
         os.makedirs(os.path.dirname(self.story_html_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.story_txt_path), exist_ok=True)
 
         with open(self.story_html_path, 'w') as f:
             f.write(output)
