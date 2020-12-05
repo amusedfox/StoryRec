@@ -16,7 +16,7 @@ NEW_STORIES_URL = 'new_submissions.php?type=story&page='
 
 IGNORE_CATEGORIES = {
     'Audio',
-    'Erotic Poetry'
+    'Erotic Poetry',
     'How To',
     'Humor & Satire',
     'Illustrated',
@@ -28,10 +28,34 @@ IGNORE_CATEGORIES = {
     'Erotic Art'
 }
 
-PROXIES = {
-    'http': '162.214.92.202:80',
-    'https': '51.81.82.175:80'
-}
+PROXIES = [
+    {
+        'http': '138.68.43.159:8080',
+        'https': '138.68.43.159:8080',
+    },
+    {
+        'http': '162.214.92.202:80',
+        'https': '51.81.82.175:80'
+    },
+    {
+        'http': '104.45.128.122:80',
+        'https': '104.45.128.122:80'
+    },
+    {
+        'http': '13.91.104.216:80',
+        'https': '13.91.104.216:80'
+    },
+    {
+        'http': '3.134.246.118:80',
+        'https': '3.134.246.118:80'
+    },
+    {
+        'http': '52.149.152.236:80',
+        'https': '52.149.152.236:80'
+    },
+]
+PROXY_i = 0
+TRIED_PROXIES = set()
 
 
 class LitStory(BaseStory):
@@ -91,13 +115,27 @@ class LitStory(BaseStory):
 
 
 def get_soup(url=BASE_URL):
+    global PROXY_i
     while True:
-        r = requests.get(url, proxies=PROXIES)
-        if r.status_code == 200:
-            break
+        try:
+            r = requests.get(url, proxies=PROXIES)
+            if r.status_code == 200:
+                break
 
-        print(f'ERROR: Got status code: {r.status_code} for {url}')
-        time.sleep(300)
+            print(f'ERROR: Got status code: {r.status_code} for {url}')
+            time.sleep(300)
+        except ConnectionResetError:
+            print('Taking a break for 1 hour')
+            time.sleep(60 * 60)  # Take a break for 1 hour
+        except requests.exceptions.ProxyError:
+            TRIED_PROXIES.add(PROXY_i)
+            PROXY_i += 1
+            print(f'Switching proxies to {PROXY_i}')
+            if PROXY_i == len(PROXIES):
+                PROXY_i = 1
+
+            if PROXY_i in TRIED_PROXIES:
+                raise ValueError('No more proxies to work with')
 
     content = r.content
     soup = BeautifulSoup(content, "lxml")
