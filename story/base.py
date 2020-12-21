@@ -4,6 +4,7 @@ import os
 from typing import List, Set
 import datetime
 import re
+import time
 
 from story_stats.util import expand_contractions, remove_punct, REGEX_NUMBERS
 
@@ -16,9 +17,11 @@ ILLEGAL_FILE_CHARS = re.compile(r'[<>:"\\/|*?\n]')
 TAG_STRAINER = SoupStrainer('tag')
 
 
-def get_soup(story_url: str) -> BeautifulSoup:
-    r = requests.get(story_url)
+def get_soup(url: str, sleep_time=2) -> BeautifulSoup:
+    r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
     soup = BeautifulSoup(r.content, "lxml")
+
+    time.sleep(sleep_time)
 
     return soup
 
@@ -99,6 +102,7 @@ class BaseStory:
             except Exception as e:
                 print(f'ERROR: Could not download {story_url}')
                 print(e)
+                time.sleep(60 * 60)
                 return
 
         elif story_html_path:
@@ -121,6 +125,7 @@ class BaseStory:
         self.find_story_metadata(soup)
         self.title = ILLEGAL_FILE_CHARS.sub('', self.title)
         self.author = ILLEGAL_FILE_CHARS.sub('', self.author)
+        self.author = re.sub('^-*', '_', self.author)
 
         file_name = f'{self.author} - {self.title}'
         first_char = get_prefix_folder(file_name)
@@ -162,12 +167,14 @@ class BaseStory:
 
         for i in range(len(self.tags)):
             self.tags[i] = ILLEGAL_FILE_CHARS.sub('_', self.tags[i])
+            self.tags[i] = re.sub('^-*', '_', self.tags[i])
 
         for i in range(len(self.chapters)):
             self.chapters[i] = self.chapters[i].replace('“', '"')
             self.chapters[i] = self.chapters[i].replace('”', '"')
             self.chapters[i] = self.chapters[i].replace('‘', "'")
             self.chapters[i] = self.chapters[i].replace('’', "'")
+            self.chapters[i] = self.chapters[i].replace('\202f', '')
 
     def save(self, write_to_disk=True):
 

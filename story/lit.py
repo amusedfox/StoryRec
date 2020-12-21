@@ -1,15 +1,13 @@
-from bs4 import BeautifulSoup
-import os
 import plac
-from pathlib import Path
-import requests
 import re
 import time
 
 import sys
 
 sys.path.append('.')
-from story.base import BaseStory, get_prefix_folder, ILLEGAL_FILE_CHARS
+from story.base import BaseStory, get_prefix_folder, ILLEGAL_FILE_CHARS, \
+    get_soup
+from folder_locations import *
 
 BASE_URL = 'https://www.literotica.com/stories/'
 NEW_STORIES_URL = 'new_submissions.php?type=story&page='
@@ -27,35 +25,6 @@ IGNORE_CATEGORIES = {
     'Adult Comics',
     'Erotic Art'
 }
-
-PROXIES = [
-    {
-        'http': '138.68.43.159:8080',
-        'https': '138.68.43.159:8080',
-    },
-    {
-        'http': '162.214.92.202:80',
-        'https': '51.81.82.175:80'
-    },
-    {
-        'http': '104.45.128.122:80',
-        'https': '104.45.128.122:80'
-    },
-    {
-        'http': '13.91.104.216:80',
-        'https': '13.91.104.216:80'
-    },
-    {
-        'http': '3.134.246.118:80',
-        'https': '3.134.246.118:80'
-    },
-    {
-        'http': '52.149.152.236:80',
-        'https': '52.149.152.236:80'
-    },
-]
-PROXY_i = 0
-TRIED_PROXIES = set()
 
 
 class LitStory(BaseStory):
@@ -114,36 +83,6 @@ class LitStory(BaseStory):
         return True
 
 
-def get_soup(url=BASE_URL):
-    global PROXY_i
-    while True:
-        try:
-            r = requests.get(url, proxies=PROXIES)
-            if r.status_code == 200:
-                break
-
-            print(f'ERROR: Got status code: {r.status_code} for {url}')
-            time.sleep(300)
-        except ConnectionResetError:
-            print('Taking a break for 1 hour')
-            time.sleep(60 * 60)  # Take a break for 1 hour
-        except requests.exceptions.ProxyError:
-            TRIED_PROXIES.add(PROXY_i)
-            PROXY_i += 1
-            print(f'Switching proxies to {PROXY_i}')
-            if PROXY_i == len(PROXIES):
-                PROXY_i = 1
-
-            if PROXY_i in TRIED_PROXIES:
-                raise ValueError('No more proxies to work with')
-
-    content = r.content
-    soup = BeautifulSoup(content, "lxml")
-
-    time.sleep(0.5)
-    return soup
-
-
 def get_page_count(url, suffix):
     soup = get_soup(url + suffix)
     links = soup.find_all('div', {'class': 'b-pager-pages'})
@@ -170,9 +109,9 @@ def get_category_links(url=BASE_URL):
     return categories
 
 
-def scrape_story(story_url, category, story_html_dir, story_txt_dir):
-    story = LitStory(story_url=story_url, save_html_dir=story_html_dir,
-                     save_txt_dir=story_txt_dir)
+def scrape_story(story_url, category, save_html_dir, save_txt_dir):
+    story = LitStory(story_url=story_url, save_html_dir=save_html_dir,
+                     save_txt_dir=save_txt_dir)
     story.add_tag(category)
     story.save()
 
@@ -218,7 +157,7 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
             scrape_story(url, category, story_html_dir, story_txt_dir)
 
 
-def download(story_html_dir, story_txt_dir):
+def download(story_html_dir=STORY_HTML_DIR, story_txt_dir=STORY_TXT_DIR):
     categories = get_category_links()
 
     for category_name, link in categories.items():
@@ -237,10 +176,8 @@ def download(story_html_dir, story_txt_dir):
                          story_txt_dir)
 
 
-@plac.pos('story_html_dir', "Directory with .html files", Path)
-@plac.pos('story_txt_dir', "Directory with .txt files", Path)
-def main(story_html_dir, story_txt_dir):
-    download(story_html_dir, story_txt_dir)
+def main():
+    download()
 
 
 if __name__ == '__main__':
