@@ -47,6 +47,14 @@ def get_prefix_folder(file_name):
     return first_char.lower()
 
 
+def get_file_name(title, author):
+    title = ILLEGAL_FILE_CHARS.sub('', title)
+    author = ILLEGAL_FILE_CHARS.sub('', author)
+    author = re.sub('^-+', '_', author)
+
+    return f'{author} - {title}'
+
+
 class BaseStory:
     """Base class for story objects"""
 
@@ -123,11 +131,7 @@ class BaseStory:
 
         soup = get_soup(self.story_url)
         self.find_story_metadata(soup)
-        self.title = ILLEGAL_FILE_CHARS.sub('', self.title)
-        self.author = ILLEGAL_FILE_CHARS.sub('', self.author)
-        self.author = re.sub('^-*', '_', self.author)
-
-        file_name = f'{self.author} - {self.title}'
+        file_name = get_file_name(self.title, self.author)
         first_char = get_prefix_folder(file_name)
 
         self.story_html_path = os.path.join(save_html_dir, first_char,

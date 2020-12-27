@@ -6,7 +6,7 @@ import sys
 
 sys.path.append('.')
 from story.base import BaseStory, get_prefix_folder, ILLEGAL_FILE_CHARS, \
-    get_soup
+    get_soup, get_file_name
 from folder_locations import *
 
 BASE_URL = 'https://www.literotica.com/stories/'
@@ -24,6 +24,24 @@ IGNORE_CATEGORIES = {
     'Poetry With Audio',
     'Adult Comics',
     'Erotic Art'
+}
+
+FINISHED_CATEGORIES = {
+    'Anal',
+    'BDSM',
+    'Celebrities & Fan Fiction',
+    'Chain Stories',
+    'Erotic Couplings',
+    'Erotic Horror',
+    'Exhibitionist & Voyeur',
+    'Fetish',
+    'First Time',
+    'Gay Male',
+    'Group Sex',
+    'Incest Taboo',
+    'Interracial Love',
+    'Lesbian Sex',
+    'Erotic Letters',
 }
 
 
@@ -129,12 +147,12 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
             if not title_meta:
                 continue
 
-            author = story.find('span', {'class': 'b-sli-author'})
-            title = ILLEGAL_FILE_CHARS.sub('', title_meta.text)
-            author = ILLEGAL_FILE_CHARS.sub('', author.a.text)
+            author_class = story.find('span', {'class': 'b-sli-author'})
+            title = title_meta.text
+            author = author_class.a.text
             url = title_meta['href']
 
-            file_name = f'{author} - {title}'
+            file_name = get_file_name(title, author)
             first_char = get_prefix_folder(file_name)
 
             story_html_path = os.path.join(story_html_dir, first_char,
@@ -162,6 +180,10 @@ def download(story_html_dir=STORY_HTML_DIR, story_txt_dir=STORY_TXT_DIR):
 
     for category_name, link in categories.items():
         if category_name in IGNORE_CATEGORIES:
+            continue
+
+        if category_name in FINISHED_CATEGORIES:
+            print(f'Skipping {category_name} since finished')
             continue
 
         # get count of pages
