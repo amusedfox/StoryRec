@@ -1,10 +1,16 @@
+import sys
+import traceback
+
 from bs4 import BeautifulSoup, SoupStrainer
 import requests
+import cfscrape
+import cloudscraper
 import os
 from typing import List, Set
 import datetime
 import re
 import time
+import pretty_errors
 
 from story_stats.util import expand_contractions, remove_punct, REGEX_NUMBERS
 
@@ -16,9 +22,26 @@ GREEN_COLOR = '\033[92m'
 ILLEGAL_FILE_CHARS = re.compile(r'[<>:"\\/|*?\n]')
 TAG_STRAINER = SoupStrainer('tag')
 
+CF_SCRAPER = cloudscraper.create_scraper(
+    browser={
+        'mobile': False,
+        'desktop': True,
+        'platform': 'windows'
+    }
+)
+
 
 def get_soup(url: str, sleep_time=2) -> BeautifulSoup:
     r = requests.get(url, headers={"User-Agent": "Mozilla/5.0"})
+    soup = BeautifulSoup(r.content, "lxml")
+
+    time.sleep(sleep_time)
+
+    return soup
+
+
+def get_cf_soup(url, sleep_time=1):
+    r = CF_SCRAPER.get(url)
     soup = BeautifulSoup(r.content, "lxml")
 
     time.sleep(sleep_time)
@@ -55,6 +78,15 @@ def get_file_name(title, author):
     return f'{author} - {title}'
 
 
+def get_file_path(title, author, site_root_folder):
+    file_name = get_file_name(title, author) + '.html'
+    prefix_folder = get_prefix_folder(file_name)
+
+    file_path = os.path.join(site_root_folder, prefix_folder, file_name)
+
+    return file_path
+
+
 class BaseStory:
     """Base class for story objects"""
 
@@ -89,6 +121,7 @@ class BaseStory:
         self.n_chapters: int = 0
         self.n_words: int = 0
         self.origin: str = "Unknown"
+        self.rating: str = 'Unknown'
         self.summary: str = "Unknown"
         self.n_comments: int = 0
         self.n_views: int = 0
@@ -107,9 +140,9 @@ class BaseStory:
         if story_url:
             try:
                 self.download_story(save_html_dir, save_txt_dir)
-            except Exception as e:
+            except Exception:
                 print(f'ERROR: Could not download {story_url}')
-                print(e)
+                print(traceback.format_exc())
                 time.sleep(60 * 60)
                 return
 
@@ -129,8 +162,11 @@ class BaseStory:
         if not save_html_dir:
             raise ValueError(f'Not given a folder to download to')
 
-        soup = get_soup(self.story_url)
-        self.find_story_metadata(soup)
+        soup = get_cf_soup(self.story_url)
+        success = self.find_story_metadata(soup)
+        if not success:
+            return
+
         file_name = get_file_name(self.title, self.author)
         first_char = get_prefix_folder(file_name)
 
@@ -201,6 +237,7 @@ class BaseStory:
             f'<tr><td><b>Favorite Count:</b></td><td id="n_favorites">{self.n_favorites}</td></tr>\n' \
             f'<tr><td><b>Word Count:</b></td><td id="n_words">{self.n_words}</td></tr>\n' \
             f'<tr><td><b>Origin:</b></td><td id="origin">{self.origin}</td></tr>\n' \
+            f'<tr><td><b>Rating:</b></td><td id="rating">{self.rating}</td></tr>\n' \
             f'<tr><td><b>Summary:</b></td><td id="summary">{self.summary}</td></tr>\n' \
             f'</table>\n' \
             f'<a><h2>Table of Contents</h2></a>\n' \
@@ -268,7 +305,7 @@ class BaseStory:
             text = remove_punct(self.content)
             self.word_list = text.split()
 
-    def find_story_metadata(self, soup: BeautifulSoup):
+    def find_story_metadata(self, soup: BeautifulSoup) -> bool:
         """Find story title and author
 
         May find other metadata as well if applicable
@@ -279,4 +316,18 @@ class BaseStory:
         raise AttributeError(f'Cannot download story into BaseStory')
 
     def __str__(self):
-        return self.story_html_path
+        meta = \
+            f'story_url: {self.story_url}\n' \
+            f'title: {self.title}\n' \
+            f'author: {self.author}\n' \
+            f'author_link: {self.author_link}\n' \
+            f'is_complete: {self.is_complete}\n' \
+            f'n_views: {self.n_views}\n' \
+            f'n_comments: {self.n_comments}\n' \
+            f'n_favorites: {self.n_favorites}\n' \
+            f'n_words: {self.n_words}\n' \
+            f'origin: {self.origin}\n' \
+            f'rating: {self.rating}\n' \
+            f'summary: {self.summary}' \
+
+        return meta

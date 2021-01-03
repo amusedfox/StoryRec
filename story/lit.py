@@ -41,7 +41,13 @@ FINISHED_CATEGORIES = {
     'Incest Taboo',
     'Interracial Love',
     'Lesbian Sex',
-    'Erotic Letters',
+    'Letters & Transcripts',
+    'Loving Wives',
+    'Mature',
+    'Mind Control',
+    'Non-Erotic',
+    'NonConsent Reluctance'
+    'NonHuman',
 }
 
 
@@ -52,7 +58,6 @@ class LitStory(BaseStory):
 
         self.title = meta.h1.text
         self.author = meta.span.a.text
-
         self.author_link = meta.span.a['href']
 
         # Sometimes author is not available
@@ -70,6 +75,8 @@ class LitStory(BaseStory):
         self.n_favorites = story_stats[4]
 
         self.origin = 'Literotica'
+
+        return True
 
     def download_story_chapters(self, soup):
 
@@ -127,7 +134,7 @@ def get_category_links(url=BASE_URL):
     return categories
 
 
-def scrape_story(story_url, category, save_html_dir, save_txt_dir):
+def download_story(story_url, category, save_html_dir, save_txt_dir):
     story = LitStory(story_url=story_url, save_html_dir=save_html_dir,
                      save_txt_dir=save_txt_dir)
     story.add_tag(category)
@@ -172,10 +179,10 @@ def download_stories(page_links, category, story_html_dir, story_txt_dir):
         print(f'Found {len(story_url_list)} stories to download from {link}')
 
         for url in story_url_list:
-            scrape_story(url, category, story_html_dir, story_txt_dir)
+            download_story(url, category, story_html_dir, story_txt_dir)
 
 
-def download(story_html_dir=STORY_HTML_DIR, story_txt_dir=STORY_TXT_DIR):
+def main(story_html_dir=LIT_STORY_HTML_DIR, story_txt_dir=LIT_STORY_TXT_DIR):
     categories = get_category_links()
 
     for category_name, link in categories.items():
@@ -196,10 +203,6 @@ def download(story_html_dir=STORY_HTML_DIR, story_txt_dir=STORY_TXT_DIR):
         # get all Story objects
         download_stories(page_links, category_name, story_html_dir,
                          story_txt_dir)
-
-
-def main():
-    download()
 
 
 if __name__ == '__main__':
